@@ -139,6 +139,13 @@ void document_select_rect(Document *doc, Rect r)
     doc->has_selection = TRUE;
 }
 
+void document_create_floating(Document *doc, Rect region)
+{
+    doc->floating = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, region.w, region.h);
+    doc->float_x = region.x;
+    doc->float_y = region.y;
+}
+
 void document_lift_selection(Document *doc)
 {
     if (!doc->has_selection || doc->floating)
@@ -148,10 +155,9 @@ void document_lift_selection(Document *doc)
      * after a move restores the layer exactly as it was before the lift. */
     history_push(doc);
 
+    document_create_floating(doc, doc->selection);
+    
     Layer *l = document_active_layer(doc);
-    doc->floating =
-        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, doc->selection.w, doc->selection.h);
-
     cairo_t *cr = cairo_create(doc->floating);
     cairo_set_source_surface(cr, l->surface, -doc->selection.x, -doc->selection.y);
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
@@ -164,9 +170,6 @@ void document_lift_selection(Document *doc)
     cairo_rectangle(cr, doc->selection.x, doc->selection.y, doc->selection.w, doc->selection.h);
     cairo_fill(cr);
     cairo_destroy(cr);
-
-    doc->float_x = doc->selection.x;
-    doc->float_y = doc->selection.y;
 }
 
 void document_commit_floating(Document *doc)

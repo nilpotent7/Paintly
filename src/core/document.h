@@ -43,7 +43,8 @@ cairo_surface_t *document_flatten(Document *doc);
  * themselves; see each implementation for the exact policy. */
 void document_select_all     (Document *doc);
 void document_select_rect    (Document *doc, Rect r);
-void document_deselect       (Document *doc);   /* commits floating pixels */
-void document_lift_selection (Document *doc);   /* layer -> floating       */
-void document_commit_floating(Document *doc);   /* floating -> layer       */
+void document_deselect       (Document *doc);   // commits floating pixels
+void document_lift_selection (Document *doc);   // layer -> floating
+void document_commit_floating(Document *doc);   // floating -> layer
+void document_create_floating(Document *doc, Rect region);   // new floating
 void document_delete_selection(Document *doc);
