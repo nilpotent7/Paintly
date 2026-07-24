@@ -1,0 +1,156 @@
+/* ==========================================================================
+   Paintly - application stylesheet
+
+   GTK4 CSS is a subset of web CSS.  Reference for what is supported:
+   https://docs.gtk.org/gtk4/css-properties.html
+   ========================================================================== */
+
+window {
+  background-color: #f3f3f3;
+  color: #1b1b1b;
+  font-size: 13px;
+}
+
+/* ---- Menu bar (File / Edit / View) ------------------------------------- */
+
+menubar {
+  background-color: #f3f3f3;
+  padding: 0 4px;
+}
+menubar > item {
+  padding: 4px 10px;
+  border-radius: 5px;
+}
+menubar > item:hover,
+menubar > item:selected {
+  background-color: #e7e7e7;
+  color: #1b1b1b;
+}
+
+/* ---- Ribbon toolbar ----------------------------------------------------- */
+
+.ribbon {
+  background-color: #f9f9f9;
+  border-bottom: 1px solid #e1e1e1;
+  padding: 8px 16px 5px 16px;
+}
+
+.ribbon-group-label {
+  font-size: 11px;
+  color: #616161;
+  margin-top: 3px;
+}
+
+/* Flat rounded icon buttons.  `:checked` marks the active tool. */
+button.tool-btn,
+menubutton.tool-btn > button {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px;
+  border-radius: 6px;
+}
+button.tool-btn:hover,
+menubutton.tool-btn > button:hover {
+  background-color: #ececec;
+}
+button.tool-btn:checked {
+  background-color: #d7e6f9;
+  box-shadow: inset 0 0 0 1px #9ec3ef;
+}
+.tool-btn-large {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+/* ---- Color swatches ------------------------------------------------------ */
+
+button.swatch {
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  border-radius: 9999px;
+  border: 1px solid alpha(black, 0.28);
+  box-shadow: none;
+  background-image: none;
+}
+button.swatch:hover {
+  border: 1px solid alpha(black, 0.65);
+}
+
+/* ---- Canvas workspace ---------------------------------------------------- */
+
+.workspace,
+.workspace viewport {
+  background-color: #d5dae0;
+}
+
+/* Thin border + drop shadow around the white canvas, like the original. */
+.canvas-frame {
+  border: 1px solid #b4b4b4;
+  box-shadow: 0 2px 12px alpha(black, 0.22);
+}
+
+/* ---- Layers panel -------------------------------------------------------- */
+
+.layers-panel {
+  background-color: #f9f9f9;
+  border-left: 1px solid #e1e1e1;
+  padding: 10px;
+}
+.layers-panel list {
+  background-color: transparent;
+}
+.layers-panel row {
+  border-radius: 6px;
+  padding: 4px;
+  margin-bottom: 2px;
+}
+.layers-panel row:selected {
+  background-color: #d7e6f9;
+  color: #1b1b1b;
+}
+.layer-thumb {
+  border: 1px solid #c9c9c9;
+}
+.panel-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.layers-panel button {
+  min-height: 26px;
+  min-width: 30px;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+/* ---- Status bar ---------------------------------------------------------- */
+
+.statusbar {
+  background-color: #f3f3f3;
+  border-top: 1px solid #e1e1e1;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #4a4a4a;
+}
+.statusbar button {
+  background-color: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  min-width: 24px;
+  min-height: 22px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  color: #4a4a4a;
+}
+.statusbar button:hover {
+  background-color: #e7e7e7;
+}
+.zoom-label {
+  min-width: 44px;
+}

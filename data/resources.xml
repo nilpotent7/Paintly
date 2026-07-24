@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Every file listed here is compiled straight into the executable by
+  glib-compile-resources (see the Makefile).  At runtime they are addressed
+  by their resource path, e.g. "/org/paintly/style.css".
+
+  Icons live under icons/scalable/actions|apps because that is the directory
+  layout GtkIconTheme expects when a resource path is registered with
+  gtk_icon_theme_add_resource_path().
+-->
+<gresources>
+  <gresource prefix="/org/paintly">
+    <file>style.css</file>
+    <file alias="icons/scalable/actions/paintly-select.svg">icons/paintly-select.svg</file>
+    <file alias="icons/scalable/actions/paintly-pencil.svg">icons/paintly-pencil.svg</file>
+    <file alias="icons/scalable/actions/paintly-fill.svg">icons/paintly-fill.svg</file>
+    <file alias="icons/scalable/actions/paintly-eraser.svg">icons/paintly-eraser.svg</file>
+    <file alias="icons/scalable/actions/paintly-brush.svg">icons/paintly-brush.svg</file>
+    <file alias="icons/scalable/actions/paintly-shape-rect.svg">icons/paintly-shape-rect.svg</file>
+    <file alias="icons/scalable/actions/paintly-shape-ellipse.svg">icons/paintly-shape-ellipse.svg</file>
+    <file alias="icons/scalable/actions/paintly-shape-triangle.svg">icons/paintly-shape-triangle.svg</file>
+    <file alias="icons/scalable/actions/paintly-size.svg">icons/paintly-size.svg</file>
+    <file alias="icons/scalable/actions/paintly-layers.svg">icons/paintly-layers.svg</file>
+    <file alias="icons/scalable/apps/paintly-app.svg">icons/paintly-app.svg</file>
+  </gresource>
+</gresources>
