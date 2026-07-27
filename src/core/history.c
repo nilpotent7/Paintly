@@ -3,6 +3,8 @@
 typedef struct {
     int              layer_index;
     cairo_surface_t *pixels;     /* the layer's surface as it was */
+    GPtrArray       *layers;     /* every layer, deep-copied, or NULL */
+    int              width, height;
 } HistEntry;
 
 struct History {
@@ -13,7 +15,10 @@ struct History {
 static void entry_free(gpointer p)
 {
     HistEntry *e = p;
-    cairo_surface_destroy(e->pixels);
+    if (e->pixels)
+        cairo_surface_destroy(e->pixels);
+    if (e->layers)
+        g_ptr_array_unref(e->layers);
     g_free(e);
 }
 
@@ -34,7 +39,8 @@ void history_free(History *h)
     g_free(h);
 }
 
-void history_push(Document *doc)
+/* Reserve the next undo slot; the caller fills in what it snapshots. */
+static HistEntry *push_entry(Document *doc)
 {
     History *h = doc->history;
 
@@ -45,40 +51,68 @@ void history_push(Document *doc)
         g_ptr_array_remove_index(h->undo, 0);
 
     HistEntry *e = g_new0(HistEntry, 1);
-    e->layer_index = doc->active;
-    e->pixels = surface_copy(document_active_layer(doc)->surface);
     g_ptr_array_add(h->undo, e);
 
     doc->modified = TRUE;
+    return e;
 }
 
-/* Undo and redo are symmetrical: pop an entry from one stack, swap its
- * surface with the layer's live surface, push it onto the other stack. */
-static void restore(Document *doc, GPtrArray *from, GPtrArray *to)
+void history_push(Document *doc)
+{
+    HistEntry *e = push_entry(doc);
+    e->layer_index = doc->active;
+    e->pixels = surface_copy(document_active_layer(doc)->surface);
+}
+
+void history_push_canvas(Document *doc)
+{
+    HistEntry *e = push_entry(doc);
+    e->layer_index = -1;
+    e->layers = g_ptr_array_new_with_free_func((GDestroyNotify) layer_free);
+    for (guint i = 0; i < doc->layers->len; i++)
+        g_ptr_array_add(e->layers, layer_copy(g_ptr_array_index(doc->layers, i)));
+    e->width  = doc->width;
+    e->height = doc->height;
+}
+
+static gboolean restore(Document *doc, GPtrArray *from, GPtrArray *to)
 {
     if (from->len == 0)
-        return;
+        return FALSE;
     HistEntry *e = g_ptr_array_steal_index(from, from->len - 1);
 
-    /* If layers were removed since the snapshot the index may be stale
-     * clamp so we never read out of bounds (see history.h limitations). */
-    int idx = MIN(e->layer_index, (int) doc->layers->len - 1);
-    Layer *l = g_ptr_array_index(doc->layers, idx);
+    document_drop_floating(doc);
+    doc->has_selection = FALSE;
 
-    cairo_surface_t *now = l->surface;
-    l->surface = e->pixels;
-    e->pixels  = now;
+    gboolean structural = e->layers != NULL;
+    if (structural) {
+        GPtrArray *live = doc->layers;
+        int w = doc->width, h = doc->height;
+        doc->layers = e->layers;  doc->width = e->width;  doc->height = e->height;
+        e->layers   = live;       e->width   = w;         e->height   = h;
+        doc->active = CLAMP(doc->active, 0, (int) doc->layers->len - 1);
+    } else {
+        /* If layers were removed since the snapshot the index may be stale
+         * clamp so we never read out of bounds (see history.h limitations). */
+        int idx = MIN(e->layer_index, (int) doc->layers->len - 1);
+        Layer *l = g_ptr_array_index(doc->layers, idx);
+
+        cairo_surface_t *now = l->surface;
+        l->surface = e->pixels;
+        e->pixels  = now;
+    }
     g_ptr_array_add(to, e);
 
     doc->modified = TRUE;
+    return structural;
 }
 
-void history_undo(Document *doc)
+gboolean history_undo(Document *doc)
 {
-    restore(doc, doc->history->undo, doc->history->redo);
+    return restore(doc, doc->history->undo, doc->history->redo);
 }
 
-void history_redo(Document *doc)
+gboolean history_redo(Document *doc)
 {
-    restore(doc, doc->history->redo, doc->history->undo);
+    return restore(doc, doc->history->redo, doc->history->undo);
 }

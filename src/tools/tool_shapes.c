@@ -3,18 +3,27 @@
 #include <math.h>
 
 typedef enum { SHAPE_RECT, SHAPE_ELLIPSE, SHAPE_TRIANGLE } ShapeKind;
-typedef enum { SHAPE_IDLE, SHAPE_DRAG, SHAPE_MOVE } ShapePhase;
+typedef enum { SHAPE_IDLE, SHAPE_DRAG, SHAPE_MOVE, SHAPE_RESIZE } ShapePhase;
 
 static ShapePhase phase = SHAPE_IDLE;
 static double grab_dx, grab_dy;   // pointer offset inside the floater
 
-static gboolean point_in_selection(Document *d, double x, double y)
+static struct {
+    gboolean  valid;
+    ShapeKind kind;
+    Rect      geom;        // shape bounds in canvas px, before stroke padding
+    gboolean  secondary;   // drawn with the right button -> follows color 2
+} live;
+
+static gboolean live_shape(Document *d)
 {
-    if (!d->has_selection)
-        return FALSE;
-    double sx = d->floating ? d->float_x : d->selection.x;
-    double sy = d->floating ? d->float_y : d->selection.y;
-    return x >= sx && y >= sy && x < sx + d->selection.w && y < sy + d->selection.h;
+    return live.valid && d->floating && d->has_selection;
+}
+
+/* Room for the stroke, which straddles the path by half its width. */
+static int stroke_pad(double width)
+{
+    return (int) ceil(MAX(1.0, width) / 2.0) + 1;
 }
 
 static void shape_path(cairo_t *cr, ShapeKind kind,
@@ -45,13 +54,30 @@ static void shape_path(cairo_t *cr, ShapeKind kind,
     }
 }
 
-static void shape_stroke(cairo_t *cr, ToolContext *c, int startOffset, int xOff, int yOff, ShapeKind kind)
+static void shape_style(cairo_t *cr, const GdkRGBA *color, double width)
 {
-    gdk_cairo_set_source_rgba(cr, &c->color);
-    cairo_set_line_width(cr, MAX(1.0, c->size));
+    gdk_cairo_set_source_rgba(cr, color);
+    cairo_set_line_width(cr, MAX(1.0, width));
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
-    shape_path(cr, kind, c->start_x - xOff + startOffset, c->start_y - yOff + startOffset, c->x - xOff + startOffset, c->y - yOff + startOffset);
+}
+
+static void shape_render(App *a)
+{
+    Document *d = a->doc;
+    int pad = stroke_pad(a->brush_size);
+    Rect box = { live.geom.x - pad,     live.geom.y - pad,
+                 live.geom.w + 2 * pad, live.geom.h + 2 * pad };
+
+    document_set_selection(d, box);
+    document_create_floating(d, d->selection);
+
+    cairo_t *cr = cairo_create(d->floating);
+    cairo_translate(cr, -d->selection.x, -d->selection.y);
+    shape_style(cr, live.secondary ? &a->secondary : &a->primary, a->brush_size);
+    shape_path(cr, live.kind, live.geom.x, live.geom.y,
+               live.geom.x + live.geom.w, live.geom.y + live.geom.h);
     cairo_stroke(cr);
+    cairo_destroy(cr);
 }
 
 static gboolean too_small(ToolContext *c)
@@ -62,66 +88,83 @@ static gboolean too_small(ToolContext *c)
 static void shapes_begin(Tool *t, ToolContext *c)
 {
     Document *d = c->doc;
-    if (point_in_selection(d, c->x, c->y)) {
+    Handle h = document_hit_handle(d, c->x, c->y, c->zoom);
+
+    if (h != HANDLE_NONE) {
+        document_resize_begin(d, h);
+        phase = SHAPE_RESIZE;
+    } else if (document_point_in_selection(d, c->x, c->y)) {
+        document_lift_selection(d);        // no-op if already floating
         phase = SHAPE_MOVE;
         grab_dx = c->x - d->float_x;
         grab_dy = c->y - d->float_y;
     } else {
-        document_deselect(d);    // commits any floating pixels
+        live.valid = FALSE;
+        document_deselect(d);              // commits any floating pixels
         phase = SHAPE_DRAG;
     }
-    
+
     canvas_repaint(c->app);
     statusbar_update(c->app);
 }
 
 static void shapes_motion(Tool *t, ToolContext *c)
 {
+    Document *d = c->doc;
+
     if (phase == SHAPE_MOVE) {
-        // Snap to whole pixels so the drop is always crisp.
-        c->doc->float_x = round(c->x - grab_dx);
-        c->doc->float_y = round(c->y - grab_dy);
-        c->doc->selection.x = (int) c->doc->float_x;
-        c->doc->selection.y = (int) c->doc->float_y;
+        // Snaps to whole pixels and stops at the canvas edge.
+        int px = d->selection.x, py = d->selection.y;
+        document_move_floating(d, c->x - grab_dx, c->y - grab_dy);
+        if (live_shape(d)) {              // keep the description in step
+            live.geom.x += d->selection.x - px;
+            live.geom.y += d->selection.y - py;
+        }
+    } else if (phase == SHAPE_RESIZE) {
+        Rect box = document_resize_rect(d, c->x, c->y);
+        if (live_shape(d)) {
+            int pad = stroke_pad(c->app->brush_size);
+            live.geom = (Rect){ box.x + pad, box.y + pad,
+                                MAX(1, box.w - 2 * pad), MAX(1, box.h - 2 * pad) };
+            shape_render(c->app);
+        } else {
+            document_resize_to(d, box);
+        }
     }
 
     canvas_repaint(c->app);   // the preview lives in overlay()
+    statusbar_update(c->app);
 }
 
 static void shapes_end(Tool *t, ToolContext *c)
 {
-    if (phase == SHAPE_MOVE || too_small(c))         // a plain click stamps nothing
+    Document *d = c->doc;
+
+    if (phase == SHAPE_RESIZE) {
+        document_resize_end(d);
+        phase = SHAPE_MOVE;
         return;
+    }
+    if (phase == SHAPE_MOVE)
+        return;
+    if (too_small(c)) {                    // a plain click stamps nothing
+        phase = SHAPE_IDLE;
+        return;
+    }
 
-    phase = SHAPE_MOVE;
+    /* One entry covers the whole draw-restyle-move-commit gesture. */
+    history_push(d);
 
-    history_push(c->doc);
+    live.valid     = TRUE;
+    live.kind      = (ShapeKind) GPOINTER_TO_INT(t->data);
+    live.secondary = (c->button == GDK_BUTTON_SECONDARY);
+    live.geom = (Rect){ (int) floor(MIN(c->start_x, c->x)),
+                        (int) floor(MIN(c->start_y, c->y)),
+                        (int) MAX(1, fabs(c->x - c->start_x)),
+                        (int) MAX(1, fabs(c->y - c->start_y)) };
+    shape_render(c->app);
 
-    document_commit_floating(c->doc); // Commit any current floating surface
-
-    int x = floor(MIN(c->start_x, c->x));
-    int y = floor(MIN(c->start_y, c->y));
-    int width = (int) MAX(1, fabs(c->last_x - c->start_x));
-    int height = (int) MAX(1, fabs(c->last_y - c->start_y));
-
-    // Stroke Width Padding
-    x -= c->app->brush_size;
-    y -= c->app->brush_size;
-    width += 2*c->app->brush_size;
-    height += 2*c->app->brush_size;
-    
-    Rect r = { x, y, width, height };
-
-    document_select_rect(c->doc, r);
-    document_create_floating(c->doc, c->doc->selection); // Create a new floating surface
-
-    cairo_t *cr = cairo_create(c->doc->floating); // paint to floating layer
-    
-    int XStartOffset = c->doc->selection.x + c->app->brush_size;
-    int YStartOffset = c->doc->selection.y + c->app->brush_size;
-    shape_stroke(cr, c, c->app->brush_size, XStartOffset, YStartOffset, (ShapeKind) GPOINTER_TO_INT(t->data));
-    
-    cairo_destroy(cr);
+    phase = SHAPE_MOVE;      // the fresh shape is immediately draggable
     canvas_repaint(c->app);
 }
 
@@ -129,13 +172,24 @@ static void shapes_overlay(Tool *t, ToolContext *c, cairo_t *cr)
 {
     if (!c->button || too_small(c) || phase != SHAPE_DRAG)   // only while dragging
         return;
-    
-    shape_stroke(cr, c, 0, 0, 0, (ShapeKind) GPOINTER_TO_INT(t->data));
+
+    shape_style(cr, &c->color, c->size);
+    shape_path(cr, (ShapeKind) GPOINTER_TO_INT(t->data),
+               c->start_x, c->start_y, c->x, c->y);
+    cairo_stroke(cr);
+}
+
+static void shapes_restyle(Tool *t, App *a)
+{
+    if (live_shape(a->doc))
+        shape_render(a);
 }
 
 static void shapes_deactivate(Tool *t, App *a)
 {
     phase = SHAPE_IDLE;
+    live.valid = FALSE;
+    document_resize_end(a->doc);
     document_deselect(a->doc);
     canvas_repaint(a);
     statusbar_update(a);
@@ -151,6 +205,7 @@ Tool tool_shape_rect = {
     .motion  = shapes_motion,
     .end     = shapes_end,
     .overlay = shapes_overlay,
+    .restyle = shapes_restyle,
     .deactivate = shapes_deactivate,
 };
 
@@ -163,6 +218,7 @@ Tool tool_shape_ellipse = {
     .motion  = shapes_motion,
     .end     = shapes_end,
     .overlay = shapes_overlay,
+    .restyle = shapes_restyle,
     .deactivate = shapes_deactivate,
 };
 
@@ -175,5 +231,6 @@ Tool tool_shape_triangle = {
     .motion  = shapes_motion,
     .end     = shapes_end,
     .overlay = shapes_overlay,
+    .restyle = shapes_restyle,
     .deactivate = shapes_deactivate,
 };

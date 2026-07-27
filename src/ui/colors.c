@@ -14,6 +14,7 @@ void colors_refresh(App *a)
 {
     if (a->color_indicator)
         gtk_widget_queue_draw(a->color_indicator);
+    app_restyle_floating(a);   /* a just-drawn shape follows the new color */
 }
 
 /* ---- indicator (two overlapping circles) -------------------------------- */
@@ -186,6 +187,7 @@ GtkWidget *colors_group_new(App *a)
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(g), 0);
     g_signal_connect(g, "pressed", G_CALLBACK(indicator_clicked), a);
     gtk_widget_add_controller(ind, GTK_EVENT_CONTROLLER(g));
+    ribbon_hand_cursor(ind);
     gtk_box_append(GTK_BOX(row), ind);
 
     /* palette */
@@ -208,6 +210,7 @@ GtkWidget *colors_group_new(App *a)
         g_signal_connect(right, "pressed", G_CALLBACK(swatch_right_clicked), a);
         gtk_widget_add_controller(btn, GTK_EVENT_CONTROLLER(right));
 
+        ribbon_hand_cursor(btn);
         gtk_grid_attach(GTK_GRID(grid), btn, i % 10, i / 10, 1, 1);
     }
     gtk_box_append(GTK_BOX(row), grid);
@@ -223,6 +226,7 @@ GtkWidget *colors_group_new(App *a)
                                    NULL, NULL);
     gtk_button_set_child(GTK_BUTTON(wheel), wheel_area);
     g_signal_connect(wheel, "clicked", G_CALLBACK(wheel_clicked), a);
+    ribbon_hand_cursor(wheel);
     gtk_box_append(GTK_BOX(row), wheel);
 
     return ribbon_group_new("Colors", row);

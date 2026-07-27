@@ -14,6 +14,23 @@ GtkWidget *ribbon_group_new(const char *label, GtkWidget *content)
     return box;
 }
 
+static void hand_state_changed(GtkWidget *w, GtkStateFlags old, gpointer data)
+{
+    gboolean held = gtk_widget_get_state_flags(w) & GTK_STATE_FLAG_ACTIVE;
+    const char *name = held ? "grabbing" : "pointer";
+    gtk_widget_set_cursor_from_name(w, name);
+    for (GtkWidget *c = gtk_widget_get_first_child(w); c;
+         c = gtk_widget_get_next_sibling(c))
+        gtk_widget_set_cursor_from_name(c, name);
+}
+
+/* Pointing hand over a control, closing while it is held. */
+void ribbon_hand_cursor(GtkWidget *w)
+{
+    gtk_widget_set_cursor_from_name(w, "pointer");
+    g_signal_connect(w, "state-flags-changed", G_CALLBACK(hand_state_changed), NULL);
+}
+
 static void tool_toggled(GtkToggleButton *btn, gpointer user_data)
 {
     if (!gtk_toggle_button_get_active(btn))
@@ -43,6 +60,7 @@ static GtkWidget *tool_button(App *a, const char *tool_id, gboolean large)
         a->tool_group_leader = GTK_TOGGLE_BUTTON(btn);
 
     g_signal_connect(btn, "toggled", G_CALLBACK(tool_toggled), a);
+    ribbon_hand_cursor(btn);
     return btn;
 }
 
@@ -50,6 +68,7 @@ static void size_changed(GtkRange *range, gpointer user_data)
 {
     App *a = user_data;
     a->brush_size = gtk_range_get_value(range);
+    app_restyle_floating(a);   /* a just-drawn shape follows the new width */
 }
 
 static GtkWidget *size_group(App *a)
@@ -80,6 +99,7 @@ static GtkWidget *size_group(App *a)
 
     gtk_popover_set_child(GTK_POPOVER(pop), box);
     gtk_menu_button_set_popover(GTK_MENU_BUTTON(mb), pop);
+    ribbon_hand_cursor(mb);
     return mb;
 }
 
@@ -145,6 +165,7 @@ GtkWidget *ribbon_new(App *a)
     gtk_widget_add_css_class(a->layers_btn, "tool-btn-large");
     gtk_widget_set_tooltip_text(a->layers_btn, "Show or hide the Layers panel");
     g_signal_connect(a->layers_btn, "toggled", G_CALLBACK(layers_toggled), a);
+    ribbon_hand_cursor(a->layers_btn);
     gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Layers", a->layers_btn));
 
     /* Pencil starts active */

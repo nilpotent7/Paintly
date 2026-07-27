@@ -19,6 +19,7 @@ struct Tool {
     const char *id;        /* stable string id, e.g. "pencil"   */
     const char *label;     /* tooltip text                      */
     const char *icon;      /* bundled icon name (data/icons/)   */
+    const char *cursor;    /* cursor over the canvas, NULL = crosshair */
     gpointer    data;      /* per-tool parameters (optional)    */
 
     /* All callbacks are optional (NULL = no-op). */
@@ -28,6 +29,7 @@ struct Tool {
     /* Draw transient feedback (shape previews…) above the composited
      * canvas.  The cairo context is already scaled to canvas coordinates. */
     void (*overlay)(Tool *t, ToolContext *c, cairo_t *cr);
+    void (*restyle)(Tool *t, App *app);
     /* Called when the user switches to another tool. */
     void (*deactivate)(Tool *t, App *app);
 };

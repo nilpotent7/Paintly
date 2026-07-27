@@ -8,5 +8,8 @@ History *history_new (void);
 void     history_free(History *h);
 
 void history_push(Document *doc);  /* call BEFORE modifying pixels */
-void history_undo(Document *doc);
-void history_redo(Document *doc);
+
+void history_push_canvas(Document *doc);
+
+gboolean history_undo(Document *doc);
+gboolean history_redo(Document *doc);

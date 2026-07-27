@@ -19,7 +19,11 @@ void statusbar_update(App *a)
         gtk_label_set_text(GTK_LABEL(a->status_cursor), "");
     }
 
-    g_snprintf(buf, sizeof buf, "%d × %d px", a->doc->width, a->doc->height);
+    /* While a canvas grip is dragged the readout shows where it would land. */
+    gboolean sizing = a->canvas_grip != HANDLE_NONE;
+    g_snprintf(buf, sizeof buf, "%d × %d px",
+               sizing ? a->grip_rect.w : a->doc->width,
+               sizing ? a->grip_rect.h : a->doc->height);
     gtk_label_set_text(GTK_LABEL(a->status_dims), buf);
 
     if (a->doc->has_selection) {

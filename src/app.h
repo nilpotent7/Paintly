@@ -4,8 +4,13 @@
 #include "core/document.h"
 
 typedef struct Tool Tool;   /* full definition in tools/tool.h */
+typedef struct App  App;
 
-typedef struct App {
+#define CANVAS_MARGIN 28    /* workspace gap around the canvas frame */
+
+typedef void (*AppContinue)(App *a);
+
+struct App {
     GtkApplication *gapp;
     GtkWindow      *window;
     Document       *doc;
@@ -17,7 +22,8 @@ typedef struct App {
     double   brush_size;   /* stroke width in canvas pixels */
 
     /* --- canvas --------------------------------------------------------- */
-    GtkWidget *canvas;     /* GtkDrawingArea */
+    GtkWidget *canvas;     /* GtkDrawingArea, exactly the size of the image */
+    GtkWidget *grip_layer; /* paints the canvas grips outside that edge      */
     GtkWidget *scroller;
     double     zoom;       /* 1.0 = 100% */
     gboolean   pressed;    /* is a stroke in progress?  */
@@ -26,6 +32,11 @@ typedef struct App {
     double     last_x,  last_y;    /* previous motion position */
     double     cur_x,   cur_y;     /* latest position          */
     gboolean   hover_valid;        /* pointer is over canvas   */
+    const char *cursor_name;       /* cursor currently set on the canvas */
+    Handle     canvas_grip;        /* canvas grip being dragged, or HANDLE_NONE */
+    Rect       grip_rect;          /* previewed canvas, in current image coords */
+    double     grip_ox, grip_oy;   /* image origin in surface coords, at press  */
+    int        grip_margin_x, grip_margin_y;  /* frame offset pinned for the drag */
 
     /* --- widgets other modules poke ------------------------------------- */
     GtkToggleButton *tool_group_leader;  /* radio-group anchor for tools */
@@ -37,18 +48,24 @@ typedef struct App {
     GtkWidget *layers_revealer, *layers_list, *opacity_scale;
     gboolean   layers_guard;
     GPtrArray *layer_thumbs;             /* thumbnail widgets, top-first */
-} App;
+
+    AppContinue pending;   /* action waiting on the unsaved-changes prompt */
+};
 
 /* ui/app.c */
 void app_startup (GtkApplication *gapp, gpointer user_data);
 void app_activate(GtkApplication *gapp, gpointer user_data);
 void app_set_tool(App *a, const char *tool_id);
 void app_update_title(App *a);
+void app_restyle_floating(App *a);
 /* Replace the current document (takes ownership; path may be NULL). */
 void app_load_document(App *a, Document *doc, const char *path);
 
 /* ui/canvas.c */
+/* The canvas, its frame and the grip layer: drop the result in the scroller. */
 GtkWidget *canvas_new(App *a);
+/* Make Ctrl+wheel zoom anywhere inside `widget`, not just over the canvas. */
+void canvas_attach_zoom(App *a, GtkWidget *widget);
 void canvas_repaint(App *a);            /* queue a redraw               */
 void canvas_update_size(App *a);        /* after zoom/document change   */
 void canvas_set_zoom(App *a, double zoom);
@@ -56,6 +73,8 @@ void canvas_set_zoom(App *a, double zoom);
 /* ui/ribbon.c */
 GtkWidget *ribbon_new(App *a);
 GtkWidget *ribbon_group_new(const char *label, GtkWidget *content);
+/* Pointing hand over a control, closing while it is held. */
+void ribbon_hand_cursor(GtkWidget *w);
 
 /* ui/colors.c */
 GtkWidget *colors_group_new(App *a);

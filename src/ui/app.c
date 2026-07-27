@@ -35,6 +35,13 @@ void app_set_tool(App *a, const char *tool_id)
     canvas_repaint(a);
 }
 
+void app_restyle_floating(App *a)
+{
+    if (a->tool && a->tool->restyle)
+        a->tool->restyle(a->tool, a);
+    canvas_repaint(a);
+}
+
 void app_load_document(App *a, Document *doc, const char *path)
 {
     if (a->doc)
@@ -87,9 +94,8 @@ static void on_open_done(GObject *source, GAsyncResult *res, gpointer data)
     g_free(path);
 }
 
-static void act_open(GSimpleAction *action, GVariant *param, gpointer user_data)
+static void open_dialog(App *a)
 {
-    App *a = user_data;
     GtkFileDialog *fd = gtk_file_dialog_new();
     gtk_file_dialog_set_title(fd, "Open Image");
 
@@ -112,7 +118,23 @@ static void act_open(GSimpleAction *action, GVariant *param, gpointer user_data)
 
 /* ---- file save ----------------------------------------------------------- */
 
-static void do_save(App *a, const char *path)
+static gboolean run_pending_idle(gpointer data)
+{
+    App *a = data;
+    AppContinue then = a->pending;
+    a->pending = NULL;
+    if (then)
+        then(a);
+    return G_SOURCE_REMOVE;
+}
+
+static void run_pending(App *a)
+{
+    if (a->pending)
+        g_idle_add(run_pending_idle, a);
+}
+
+static gboolean do_save(App *a, const char *path)
 {
     document_deselect(a->doc);    /* commit floating pixels before export */
     cairo_surface_t *flat = document_flatten(a->doc);
@@ -120,7 +142,7 @@ static void do_save(App *a, const char *path)
     cairo_surface_destroy(flat);
     if (st != CAIRO_STATUS_SUCCESS) {
         show_error(a, cairo_status_to_string(st));
-        return;
+        return FALSE;
     }
     if (a->doc->filepath != path) {
         g_free(a->doc->filepath);
@@ -129,17 +151,21 @@ static void do_save(App *a, const char *path)
     a->doc->modified = FALSE;
     app_update_title(a);
     canvas_repaint(a);
+    return TRUE;
 }
 
 static void on_save_done(GObject *source, GAsyncResult *res, gpointer data)
 {
     App *a = data;
     GFile *f = gtk_file_dialog_save_finish(GTK_FILE_DIALOG(source), res, NULL);
-    if (!f)
+    if (!f) {
+        a->pending = NULL;        /* cancelling the save cancels the rest */
         return;
+    }
     char *path = g_file_get_path(f);
     g_object_unref(f);
     if (!path) {
+        a->pending = NULL;
         show_error(a, "Only local destinations are supported.");
         return;
     }
@@ -149,7 +175,10 @@ static void on_save_done(GObject *source, GAsyncResult *res, gpointer data)
         g_free(path);
         path = fixed;
     }
-    do_save(a, path);
+    if (do_save(a, path))
+        run_pending(a);
+    else
+        a->pending = NULL;
     g_free(path);
 }
 
@@ -168,13 +197,21 @@ static void save_with_dialog(App *a)
     g_object_unref(fd);
 }
 
+static void save_now(App *a)
+{
+    if (a->doc->filepath) {
+        if (do_save(a, a->doc->filepath))
+            run_pending(a);
+        else
+            a->pending = NULL;
+    } else {
+        save_with_dialog(a);
+    }
+}
+
 static void act_save(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-    App *a = user_data;
-    if (a->doc->filepath)
-        do_save(a, a->doc->filepath);
-    else
-        save_with_dialog(a);
+    save_now(user_data);
 }
 
 static void act_save_as(GSimpleAction *action, GVariant *param, gpointer user_data)
@@ -182,12 +219,148 @@ static void act_save_as(GSimpleAction *action, GVariant *param, gpointer user_da
     save_with_dialog(user_data);
 }
 
+/* ---- unsaved changes ----------------------------------------------------- */
+
+typedef enum { CONFIRM_CANCEL, CONFIRM_DISCARD, CONFIRM_SAVE } ConfirmChoice;
+
+static gboolean save_now_idle(gpointer data)
+{
+    save_now(data);
+    return G_SOURCE_REMOVE;
+}
+
+static void confirm_closed(GtkWindow *dlg, gpointer data)
+{
+    App *a = data;
+    switch (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(dlg), "choice"))) {
+    case CONFIRM_DISCARD: run_pending(a);                  break;
+    case CONFIRM_SAVE:    g_idle_add(save_now_idle, a);    break;
+    default:              a->pending = NULL;
+    }
+}
+
+static void confirm_clicked(GtkButton *btn, gpointer data)
+{
+    GtkWidget *dlg = GTK_WIDGET(gtk_widget_get_root(GTK_WIDGET(btn)));
+    g_object_set_data(G_OBJECT(dlg), "choice",
+                      g_object_get_data(G_OBJECT(btn), "choice"));
+    gtk_window_destroy(GTK_WINDOW(dlg));
+}
+
+static gboolean confirm_key(GtkEventControllerKey *key, guint keyval,
+                            guint keycode, GdkModifierType state, gpointer data)
+{
+    if (keyval != GDK_KEY_Escape)
+        return FALSE;
+    gtk_window_destroy(GTK_WINDOW(
+        gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(key))));
+    return TRUE;
+}
+
+static GtkWidget *confirm_button(const char *label, ConfirmChoice choice,
+                                 const char *accent)
+{
+    GtkWidget *b = gtk_button_new_with_label(label);
+    gtk_widget_add_css_class(b, "dialog-btn");
+    if (accent)
+        gtk_widget_add_css_class(b, accent);
+    g_object_set_data(G_OBJECT(b), "choice", GINT_TO_POINTER(choice));
+    g_signal_connect(b, "clicked", G_CALLBACK(confirm_clicked), NULL);
+    ribbon_hand_cursor(b);
+    return b;
+}
+
+static void confirm_unsaved(App *a, AppContinue then)
+{
+    if (!a->doc->modified) {
+        then(a);
+        return;
+    }
+    a->pending = then;
+
+    char *base = a->doc->filepath ? g_path_get_basename(a->doc->filepath)
+                                  : g_strdup("Untitled");
+    char *msg = g_strdup_printf("Save changes to “%s”?", base);
+
+    GtkWidget *dlg = gtk_window_new();
+    gtk_window_set_title(GTK_WINDOW(dlg), "Paintly");
+    gtk_window_set_transient_for(GTK_WINDOW(dlg), a->window);
+    gtk_window_set_destroy_with_parent(GTK_WINDOW(dlg), TRUE);
+    gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
+    gtk_window_set_resizable(GTK_WINDOW(dlg), FALSE);
+
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_add_css_class(box, "dialog");
+
+    GtkWidget *title = gtk_label_new(msg);
+    gtk_widget_add_css_class(title, "dialog-title");
+    gtk_label_set_wrap(GTK_LABEL(title), TRUE);
+    gtk_box_append(GTK_BOX(box), title);
+
+    GtkWidget *detail =
+        gtk_label_new("Your changes will be lost if you don't save them.");
+    gtk_widget_add_css_class(detail, "dialog-detail");
+    gtk_label_set_wrap(GTK_LABEL(detail), TRUE);
+    gtk_box_append(GTK_BOX(box), detail);
+
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_widget_set_halign(row, GTK_ALIGN_END);
+    gtk_box_append(GTK_BOX(row), confirm_button("Cancel", CONFIRM_CANCEL, NULL));
+    gtk_box_append(GTK_BOX(row), confirm_button("Discard", CONFIRM_DISCARD,
+                                                "danger"));
+    GtkWidget *save = confirm_button("Save", CONFIRM_SAVE, "suggested");
+    gtk_box_append(GTK_BOX(row), save);
+    gtk_box_append(GTK_BOX(box), row);
+
+    gtk_window_set_child(GTK_WINDOW(dlg), box);
+    gtk_window_set_default_widget(GTK_WINDOW(dlg), save);
+    gtk_widget_grab_focus(save);
+
+    GtkEventController *keys = gtk_event_controller_key_new();
+    g_signal_connect(keys, "key-pressed", G_CALLBACK(confirm_key), NULL);
+    gtk_widget_add_controller(dlg, keys);
+    g_signal_connect(dlg, "destroy", G_CALLBACK(confirm_closed), a);
+
+    gtk_window_present(GTK_WINDOW(dlg));
+    g_free(base);
+    g_free(msg);
+}
+
 /* ---- other actions ------------------------------------------------------- */
+
+static void load_blank(App *a)
+{
+    app_load_document(a, document_new(DEFAULT_W, DEFAULT_H), NULL);
+}
+
+static void close_window(App *a)
+{
+    gtk_window_destroy(a->window);   /* does not re-emit ::close-request */
+}
+
+static void quit_app(App *a)
+{
+    g_application_quit(G_APPLICATION(a->gapp));
+}
 
 static void act_new(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
+    confirm_unsaved(user_data, load_blank);
+}
+
+static void act_open(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+    confirm_unsaved(user_data, open_dialog);
+}
+
+/* The window manager's close button; TRUE blocks the close while we ask. */
+static gboolean on_close_request(GtkWindow *win, gpointer user_data)
+{
     App *a = user_data;
-    app_load_document(a, document_new(DEFAULT_W, DEFAULT_H), NULL);
+    if (!a->doc->modified)
+        return FALSE;
+    confirm_unsaved(a, close_window);
+    return TRUE;
 }
 
 static void after_pixels_changed(App *a)
@@ -198,18 +371,25 @@ static void after_pixels_changed(App *a)
     app_update_title(a);
 }
 
+static void after_restore(App *a, gboolean structural)
+{
+    if (structural) {
+        canvas_update_size(a);
+        layers_panel_refresh(a);
+    }
+    after_pixels_changed(a);
+}
+
 static void act_undo(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
     App *a = user_data;
-    history_undo(a->doc);
-    after_pixels_changed(a);
+    after_restore(a, history_undo(a->doc));
 }
 
 static void act_redo(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
     App *a = user_data;
-    history_redo(a->doc);
-    after_pixels_changed(a);
+    after_restore(a, history_redo(a->doc));
 }
 
 static void act_select_all(GSimpleAction *action, GVariant *param, gpointer user_data)
@@ -260,8 +440,7 @@ static void act_toggle_layers(GSimpleAction *action, GVariant *param,
 
 static void act_quit(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-    App *a = user_data;
-    g_application_quit(G_APPLICATION(a->gapp));
+    confirm_unsaved(user_data, quit_app);
 }
 
 static const GActionEntry WIN_ACTIONS[] = {
@@ -402,6 +581,7 @@ void app_activate(GtkApplication *gapp, gpointer user_data)
     a->doc = document_new(DEFAULT_W, DEFAULT_H);
     a->zoom = 1.0;
     a->brush_size = 3;
+    a->canvas_grip = HANDLE_NONE;   /* zero would read as HANDLE_NW */
     gdk_rgba_parse(&a->primary, "#000000");
     gdk_rgba_parse(&a->secondary, "#ffffff");
     a->tool = tools_find("pencil");
@@ -413,6 +593,7 @@ void app_activate(GtkApplication *gapp, gpointer user_data)
     gtk_application_window_set_show_menubar(GTK_APPLICATION_WINDOW(win), TRUE);
     g_action_map_add_action_entries(G_ACTION_MAP(win), WIN_ACTIONS,
                                     G_N_ELEMENTS(WIN_ACTIONS), a);
+    g_signal_connect(win, "close-request", G_CALLBACK(on_close_request), a);
 
     GtkWidget *root = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
 
@@ -429,16 +610,9 @@ void app_activate(GtkApplication *gapp, gpointer user_data)
 
     /* A 1-widget box provides the thin border + shadow around the canvas
      * without interfering with the drawing area's own size. */
-    GtkWidget *frame = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_widget_add_css_class(frame, "canvas-frame");
-    gtk_widget_set_halign(frame, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(frame, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top(frame, 28);
-    gtk_widget_set_margin_bottom(frame, 28);
-    gtk_widget_set_margin_start(frame, 28);
-    gtk_widget_set_margin_end(frame, 28);
-    gtk_box_append(GTK_BOX(frame), canvas_new(a));
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(a->scroller), frame);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(a->scroller), canvas_new(a));
+    /* Ctrl+wheel zooms anywhere in the window, not just over the canvas. */
+    canvas_attach_zoom(a, win);
 
     gtk_box_append(GTK_BOX(work), a->scroller);
     gtk_box_append(GTK_BOX(work), panel);

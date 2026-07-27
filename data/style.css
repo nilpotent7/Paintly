@@ -88,10 +88,62 @@ button.swatch:hover {
   background-color: #d5dae0;
 }
 
-/* Thin border + drop shadow around the white canvas, like the original. */
+/* Thin border + drop shadow around the white canvas, like the original.
+ * The drawing area inside is exactly the canvas, so this hugs it at any
+ * size - including while a resize grip is being dragged. */
 .canvas-frame {
   border: 1px solid #b4b4b4;
   box-shadow: 0 2px 12px alpha(black, 0.22);
+}
+
+/* ---- Dialogs ------------------------------------------------------------- */
+
+/* The unsaved-changes prompt.  Hand-built, so its buttons can say which
+ * choice is destructive and which is the default. */
+.dialog {
+  background-color: #f9f9f9;
+  padding: 20px 22px 16px 22px;
+}
+.dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.dialog-detail {
+  color: #4a4a4a;
+  margin-bottom: 20px;
+}
+
+.dialog-btn {
+  min-width: 84px;
+  min-height: 30px;
+  padding: 3px 14px;
+  border-radius: 6px;
+  border: 1px solid #cfcfcf;
+  background-color: #fdfdfd;
+  background-image: none;
+  box-shadow: none;
+  color: #1b1b1b;
+}
+.dialog-btn:hover {
+  background-color: #f0f0f0;
+}
+/* Discard throws the work away - colour it like it. */
+.dialog-btn.danger {
+  background-color: #c42b1c;
+  border-color: #a82316;
+  color: #ffffff;
+}
+.dialog-btn.danger:hover {
+  background-color: #a82316;
+}
+.dialog-btn.suggested {
+  background-color: #0f6cbd;
+  border-color: #0c5896;
+  color: #ffffff;
+}
+.dialog-btn.suggested:hover {
+  background-color: #0c5896;
 }
 
 /* ---- Layers panel -------------------------------------------------------- */
