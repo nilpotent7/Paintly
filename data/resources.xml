@@ -16,6 +16,7 @@
     <file>cursors/brush.svg</file>
     <file>cursors/eraser.svg</file>
     <file>cursors/fill.svg</file>
+    <file>cursors/blocked.svg</file>
     <file alias="icons/scalable/actions/paintly-select.svg">icons/paintly-select.svg</file>
     <file alias="icons/scalable/actions/paintly-pencil.svg">icons/paintly-pencil.svg</file>
     <file alias="icons/scalable/actions/paintly-fill.svg">icons/paintly-fill.svg</file>
@@ -26,6 +27,10 @@
     <file alias="icons/scalable/actions/paintly-shape-triangle.svg">icons/paintly-shape-triangle.svg</file>
     <file alias="icons/scalable/actions/paintly-size.svg">icons/paintly-size.svg</file>
     <file alias="icons/scalable/actions/paintly-layers.svg">icons/paintly-layers.svg</file>
+    <file alias="icons/scalable/actions/paintly-layer-add.svg">icons/paintly-layer-add.svg</file>
+    <file alias="icons/scalable/actions/paintly-layer-delete.svg">icons/paintly-layer-delete.svg</file>
+    <file alias="icons/scalable/actions/paintly-layer-up.svg">icons/paintly-layer-up.svg</file>
+    <file alias="icons/scalable/actions/paintly-layer-down.svg">icons/paintly-layer-down.svg</file>
     <file alias="icons/scalable/apps/paintly-app.svg">icons/paintly-app.svg</file>
   </gresource>
 </gresources>

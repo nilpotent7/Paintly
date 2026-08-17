@@ -44,6 +44,9 @@ Layer *document_active_layer(Document *doc);
 Layer *document_add_layer   (Document *doc);              /* above active  */
 void   document_remove_layer(Document *doc, int index);   /* keeps >= 1    */
 void   document_move_layer  (Document *doc, int index, int dir); /* ±1     */
+/* Lift the layer at `from` and drop it back in at `to` - list-reorder
+ * semantics, i.e. `to` is the destination's index before the move. */
+void   document_reorder_layer(Document *doc, int from, int to);
 
 /* Paint all visible layers (and the floating selection) into `cr`.
  * `filter` controls scaling interpolation: NEAREST gives crisp pixels when

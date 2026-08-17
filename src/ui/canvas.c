@@ -375,6 +375,8 @@ static const struct { const char *name, *file; int hot_x, hot_y; } ART_CURSORS[]
     { "brush",  "/org/paintly/cursors/brush.svg",  2, 22 },
     { "eraser", "/org/paintly/cursors/eraser.svg", 2, 22 },
     { "fill",   "/org/paintly/cursors/fill.svg",   2, 22 },
+    /* Centred, not tipped: it marks the pointer, it doesn't draw. */
+    { "blocked", "/org/paintly/cursors/blocked.svg", 12, 12 },
 };
 
 /* Built on first use and kept: nothing here runs before the first frame. */
@@ -417,6 +419,12 @@ static void set_cursor(App *a, const char *name)
 
 static void update_cursor(App *a)
 {
+    /* A hidden layer takes nothing - not a stroke, not a selection move. */
+    if (!app_can_edit(a)) {
+        set_cursor(a, "blocked");
+        return;
+    }
+
     const char *name = (a->tool && a->tool->cursor) ? a->tool->cursor : "crosshair";
     Handle h = document_hit_handle(a->doc, a->cur_x, a->cur_y, a->zoom);
 
@@ -436,6 +444,8 @@ static void on_press(GtkGestureClick *gesture, int n_press,
     if (a->pressed || a->canvas_grip != HANDLE_NONE ||
         (btn != GDK_BUTTON_PRIMARY && btn != GDK_BUTTON_SECONDARY))
         return;      /* one gesture at a time, tool or canvas grip */
+    if (!app_can_edit(a))
+        return;      /* the one gate every tool passes through */
 
     a->pressed = TRUE;
     a->pressed_button = btn;
@@ -582,6 +592,12 @@ void canvas_repaint(App *a)
 {
     if (a->canvas)
         gtk_widget_queue_draw(a->canvas);
+}
+
+void canvas_sync_cursor(App *a)
+{
+    if (a->canvas && a->canvas_grip == HANDLE_NONE)
+        update_cursor(a);
 }
 
 void canvas_view_origin(App *a, double *x, double *y)

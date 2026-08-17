@@ -35,6 +35,33 @@ void app_update_title(App *a)
     g_free(title);
 }
 
+/* ---- edit lock ----------------------------------------------------------- */
+
+/* A hidden layer is off limits: pixels drawn into it would vanish silently. */
+gboolean app_can_edit(App *a)
+{
+    return document_active_layer(a->doc)->visible;
+}
+
+static void set_action_enabled(App *a, const char *name, gboolean on)
+{
+    GAction *act = g_action_map_lookup_action(G_ACTION_MAP(a->window), name);
+    if (act)
+        g_simple_action_set_enabled(G_SIMPLE_ACTION(act), on);
+}
+
+/* Call after anything that changes which layer is active, or whether it is
+ * visible.  Undo and redo stay live on purpose - they restore a layer rather
+ * than edit one, and losing them because a layer is hidden would be worse. */
+void app_sync_editable(App *a)
+{
+    gboolean on = app_can_edit(a);
+    set_action_enabled(a, "cut", on);
+    set_action_enabled(a, "paste", on);
+    set_action_enabled(a, "delete-selection", on);
+    canvas_sync_cursor(a);
+}
+
 void app_set_tool(App *a, const char *tool_id)
 {
     Tool *t = tools_find(tool_id);

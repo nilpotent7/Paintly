@@ -62,6 +62,10 @@ void app_open    (GtkApplication *gapp, GFile **files, int n_files,
 void app_set_tool(App *a, const char *tool_id);
 void app_update_title(App *a);
 void app_restyle_floating(App *a);
+/* FALSE while the active layer is hidden - nothing may touch its pixels. */
+gboolean app_can_edit(App *a);
+/* Re-gate the editing actions and the canvas cursor on that answer. */
+void app_sync_editable(App *a);
 /* Replace the current document (takes ownership; path may be NULL). */
 void app_load_document(App *a, Document *doc, const char *path);
 
@@ -71,6 +75,7 @@ GtkWidget *canvas_new(App *a);
 /* Make Ctrl+wheel zoom anywhere inside `widget`, not just over the canvas. */
 void canvas_attach_zoom(App *a, GtkWidget *widget);
 void canvas_repaint(App *a);            /* queue a redraw               */
+void canvas_sync_cursor(App *a);        /* after the edit lock changed  */
 /* Top-left of the visible workspace, in canvas pixels, clamped to the image. */
 void canvas_view_origin(App *a, double *x, double *y);
 void canvas_update_size(App *a);        /* after zoom/document change   */

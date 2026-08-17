@@ -81,6 +81,26 @@ void document_move_layer(Document *doc, int index, int dir)
     doc->modified = TRUE;
 }
 
+void document_reorder_layer(Document *doc, int from, int to)
+{
+    int n = (int) doc->layers->len;
+    if (from < 0 || from >= n || to < 0 || to >= n || from == to)
+        return;
+
+    /* Steal, not remove: the array's free-func would destroy the layer. */
+    Layer *l = g_ptr_array_steal_index(doc->layers, from);
+    g_ptr_array_insert(doc->layers, to, l);
+
+    /* Keep `active` pointing at whichever layer it pointed at before. */
+    if (doc->active == from)
+        doc->active = to;
+    else if (doc->active > from && doc->active <= to)
+        doc->active--;
+    else if (doc->active < from && doc->active >= to)
+        doc->active++;
+    doc->modified = TRUE;
+}
+
 void document_render(Document *doc, cairo_t *cr, cairo_filter_t filter)
 {
     for (guint i = 0; i < doc->layers->len; i++) {
