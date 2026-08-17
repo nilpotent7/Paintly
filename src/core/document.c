@@ -334,7 +334,8 @@ cairo_surface_t *document_copy_selection(Document *doc)
     return out;
 }
 
-void document_paste(Document *doc, cairo_surface_t *src, int x, int y)
+void document_paste(Document *doc, cairo_surface_t *src, int x, int y,
+                    double red, double green, double blue, double alpha)
 {
     Rect r = { x, y,
                cairo_image_surface_get_width (src),
@@ -342,9 +343,15 @@ void document_paste(Document *doc, cairo_surface_t *src, int x, int y)
     if (r.w < 1 || r.h < 1)
         return;
 
-    /* Stamp first, snapshot second: one undo then removes only the paste. */
-    document_deselect(doc);
-    history_push(doc);
+    Rect fit = { 0, 0, MAX(doc->width,  r.x + r.w),
+                       MAX(doc->height, r.y + r.h) };
+    if (fit.w > doc->width || fit.h > doc->height) {
+        document_resize_canvas(doc, fit, red, green, blue, alpha);
+    } else {
+        /* Stamp first, snapshot second: one undo then removes only the paste. */
+        document_deselect(doc);
+        history_push(doc);
+    }
 
     document_set_selection(doc, r);      /* verbatim - a paste may hang off */
     document_create_floating(doc, doc->selection);

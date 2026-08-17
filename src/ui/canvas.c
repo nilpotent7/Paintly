@@ -584,6 +584,19 @@ void canvas_repaint(App *a)
         gtk_widget_queue_draw(a->canvas);
 }
 
+void canvas_view_origin(App *a, double *x, double *y)
+{
+    *x = *y = 0;
+    graphene_point_t p;
+    /* The scroller's own origin is the top-left of what the user can see. */
+    if (!a->canvas || !a->scroller ||
+        !gtk_widget_compute_point(a->scroller, a->canvas,
+                                  &GRAPHENE_POINT_INIT(0, 0), &p))
+        return;                     /* not laid out yet - the canvas origin does */
+    *x = CLAMP(TO_CANVAS_X(a, p.x), 0, a->doc->width);
+    *y = CLAMP(TO_CANVAS_Y(a, p.y), 0, a->doc->height);
+}
+
 void canvas_update_size(App *a)
 {
     if (!a->canvas)

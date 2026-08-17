@@ -74,7 +74,8 @@ void document_move_floating  (Document *doc, double x, double y);
  * the caller owns the surface. */
 cairo_surface_t *document_copy_selection(Document *doc);
 /* Drop `src` in at (x, y) as a floating selection, ready to be moved. */
-void document_paste(Document *doc, cairo_surface_t *src, int x, int y);
+void document_paste(Document *doc, cairo_surface_t *src, int x, int y,
+                    double red, double green, double blue, double alpha);
 
 /* ---- selection geometry ------------------------------------------------- */
 

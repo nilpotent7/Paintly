@@ -13,6 +13,17 @@ static void show_error(App *a, const char *msg)
     g_object_unref(d);
 }
 
+/* Folder holding the open file, or NULL - where both file dialogs start. */
+static GFile *current_folder(App *a)
+{
+    if (!a->doc->filepath)
+        return NULL;
+    GFile *f = g_file_new_for_path(a->doc->filepath);
+    GFile *dir = g_file_get_parent(f);
+    g_object_unref(f);
+    return dir;
+}
+
 void app_update_title(App *a)
 {
     char *base = a->doc->filepath ? g_path_get_basename(a->doc->filepath)
@@ -120,6 +131,12 @@ static void open_dialog(App *a)
     gtk_file_dialog_set_filters(fd, G_LIST_MODEL(filters));
     g_object_unref(filters);
 
+    GFile *dir = current_folder(a);
+    if (dir) {
+        gtk_file_dialog_set_initial_folder(fd, dir);
+        g_object_unref(dir);
+    }
+
     gtk_file_dialog_open(fd, a->window, NULL, on_open_done, a);
     g_object_unref(fd);
 }
@@ -194,6 +211,11 @@ static void save_with_dialog(App *a)
 {
     GtkFileDialog *fd = gtk_file_dialog_new();
     gtk_file_dialog_set_title(fd, "Save Image");
+    GFile *dir = current_folder(a);
+    if (dir) {
+        gtk_file_dialog_set_initial_folder(fd, dir);
+        g_object_unref(dir);
+    }
     if (a->doc->filepath) {
         char *base = g_path_get_basename(a->doc->filepath);
         gtk_file_dialog_set_initial_name(fd, base);
@@ -428,9 +450,18 @@ static void on_paste_done(GObject *source, GAsyncResult *res, gpointer data)
     cairo_surface_t *s = surface_from_texture(t);
     g_object_unref(t);
 
+    /* Land it where the user is looking, not at the canvas origin. */
+    double vx, vy;
+    canvas_view_origin(a, &vx, &vy);
+    int w0 = a->doc->width, h0 = a->doc->height;
+
     app_set_tool(a, "select");    /* the pasted pixels are draggable at once */
-    document_paste(a->doc, s, 0, 0);
+    document_paste(a->doc, s, (int) vx, (int) vy,
+                   a->secondary.red, a->secondary.green,
+                   a->secondary.blue, a->secondary.alpha);
     cairo_surface_destroy(s);
+    if (a->doc->width != w0 || a->doc->height != h0)
+        canvas_update_size(a);    /* the paste grew the canvas to fit */
     after_pixels_changed(a);
 }
 

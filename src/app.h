@@ -71,6 +71,8 @@ GtkWidget *canvas_new(App *a);
 /* Make Ctrl+wheel zoom anywhere inside `widget`, not just over the canvas. */
 void canvas_attach_zoom(App *a, GtkWidget *widget);
 void canvas_repaint(App *a);            /* queue a redraw               */
+/* Top-left of the visible workspace, in canvas pixels, clamped to the image. */
+void canvas_view_origin(App *a, double *x, double *y);
 void canvas_update_size(App *a);        /* after zoom/document change   */
 void canvas_set_zoom(App *a, double zoom);
 
