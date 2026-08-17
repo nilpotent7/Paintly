@@ -40,6 +40,7 @@ struct App {
 
     /* --- widgets other modules poke ------------------------------------- */
     GtkToggleButton *tool_group_leader;  /* radio-group anchor for tools */
+    GPtrArray *tool_btns;                /* one ribbon toggle per tool   */
     GtkWidget *layers_btn;               /* ribbon toggle for the panel  */
     GtkWidget *color_indicator;
     GtkWidget *status_dims, *status_cursor, *status_sel;
@@ -55,6 +56,9 @@ struct App {
 /* ui/app.c */
 void app_startup (GtkApplication *gapp, gpointer user_data);
 void app_activate(GtkApplication *gapp, gpointer user_data);
+/* ::open - file arguments from the command line or a file manager. */
+void app_open    (GtkApplication *gapp, GFile **files, int n_files,
+                  const char *hint, gpointer user_data);
 void app_set_tool(App *a, const char *tool_id);
 void app_update_title(App *a);
 void app_restyle_floating(App *a);
@@ -73,6 +77,8 @@ void canvas_set_zoom(App *a, double zoom);
 /* ui/ribbon.c */
 GtkWidget *ribbon_new(App *a);
 GtkWidget *ribbon_group_new(const char *label, GtkWidget *content);
+/* Check the button for App.tool, after a tool switch that wasn't a click. */
+void ribbon_sync_tool(App *a);
 /* Pointing hand over a control, closing while it is held. */
 void ribbon_hand_cursor(GtkWidget *w);
 

@@ -312,6 +312,50 @@ void document_delete_selection(Document *doc)
     doc->modified = TRUE;
 }
 
+cairo_surface_t *document_copy_selection(Document *doc)
+{
+    if (!doc->has_selection)
+        return NULL;
+    Rect r = document_selection_rect(doc);
+
+    cairo_surface_t *out =
+        cairo_image_surface_create(CAIRO_FORMAT_ARGB32, r.w, r.h);
+    cairo_t *cr = cairo_create(out);
+    /* SOURCE copies alpha verbatim; whatever hangs off the canvas or off the
+     * floater stays transparent, exactly as it looks on screen. */
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    if (doc->floating)
+        cairo_set_source_surface(cr, doc->floating, 0, 0);
+    else
+        cairo_set_source_surface(cr, document_active_layer(doc)->surface,
+                                 -r.x, -r.y);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    return out;
+}
+
+void document_paste(Document *doc, cairo_surface_t *src, int x, int y)
+{
+    Rect r = { x, y,
+               cairo_image_surface_get_width (src),
+               cairo_image_surface_get_height(src) };
+    if (r.w < 1 || r.h < 1)
+        return;
+
+    /* Stamp first, snapshot second: one undo then removes only the paste. */
+    document_deselect(doc);
+    history_push(doc);
+
+    document_set_selection(doc, r);      /* verbatim - a paste may hang off */
+    document_create_floating(doc, doc->selection);
+    cairo_t *cr = cairo_create(doc->floating);
+    cairo_set_source_surface(cr, src, 0, 0);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    doc->modified = TRUE;
+}
+
 /* ---- selection geometry -------------------------------------------------- */
 
 Rect document_selection_rect(Document *doc)

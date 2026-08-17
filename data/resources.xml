@@ -6,11 +6,16 @@
 
   Icons live under icons/scalable/actions|apps because that is the directory
   layout GtkIconTheme expects when a resource path is registered with
-  gtk_icon_theme_add_resource_path().
+  gtk_icon_theme_add_resource_path().  Cursor art is not part of that theme -
+  canvas.c loads it by plain resource path - so it keeps its own prefix.
 -->
 <gresources>
   <gresource prefix="/org/paintly">
     <file>style.css</file>
+    <file>cursors/pencil.svg</file>
+    <file>cursors/brush.svg</file>
+    <file>cursors/eraser.svg</file>
+    <file>cursors/fill.svg</file>
     <file alias="icons/scalable/actions/paintly-select.svg">icons/paintly-select.svg</file>
     <file alias="icons/scalable/actions/paintly-pencil.svg">icons/paintly-pencil.svg</file>
     <file alias="icons/scalable/actions/paintly-fill.svg">icons/paintly-fill.svg</file>

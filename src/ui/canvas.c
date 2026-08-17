@@ -5,8 +5,8 @@
 #define ZOOM_MIN 0.10
 #define ZOOM_MAX 8.0
 
-#define GRIP_GAP   3.0                          /* canvas edge -> grip */
-#define GRIP_ROOM  ((int) (HANDLE_PX + GRIP_GAP + 1))  /* room a grip needs */
+#define GRIP_OUT   (HANDLE_PX / 2)      /* grip centre, outside the edge it marks */
+#define GRIP_ROOM  ((int) HANDLE_PX + 1)         /* room a grip needs beside it */
 #define CANVAS_MIN 8                            /* smallest canvas, in px */
 
 /* Build the context passed to tool callbacks from current app state. */
@@ -66,14 +66,16 @@ static void draw_ants(App *a, cairo_t *cr)
     cairo_restore(cr);
 }
 
+/* HANDLE_PX is the outer size, so the path is inset by half the outline. */
 static void draw_grip(cairo_t *cr, double cx, double cy, double zoom)
 {
-    double s = HANDLE_PX / zoom;
+    double lw = 1.0 / zoom;
+    double s  = HANDLE_PX / zoom - lw;
     cairo_rectangle(cr, cx - s / 2, cy - s / 2, s, s);
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_fill_preserve(cr);
     cairo_set_source_rgb(cr, 0.13, 0.13, 0.13);
-    cairo_set_line_width(cr, 1.0 / zoom);
+    cairo_set_line_width(cr, lw);
     cairo_stroke(cr);
 }
 
@@ -142,28 +144,34 @@ static const char *const HANDLE_CURSOR[HANDLE_COUNT] = {
     "se-resize", "s-resize", "sw-resize", "w-resize",
 };
 
+/* The framed canvas, in grip-layer coordinates.  It is the frame rather than
+ * the drawing area so the grips clear the frame's own 1px border. */
 static gboolean grip_canvas_box(App *a, Rect *box)
 {
+    GtkWidget *frame = a->canvas ? gtk_widget_get_parent(a->canvas) : NULL;
     graphene_point_t p;
-    if (!a->canvas || !a->grip_layer ||
-        !gtk_widget_compute_point(a->canvas, a->grip_layer,
+    if (!frame || !a->grip_layer ||
+        !gtk_widget_compute_point(frame, a->grip_layer,
                                   &GRAPHENE_POINT_INIT(0, 0), &p))
         return FALSE;
     *box = (Rect){ (int) p.x, (int) p.y,
-                   gtk_widget_get_width(a->canvas),
-                   gtk_widget_get_height(a->canvas) };
+                   gtk_widget_get_width(frame),
+                   gtk_widget_get_height(frame) };
     return box->w > 0 && box->h > 0;
 }
 
-/* Grip centre for handle `h`, pushed clear of the canvas edge it sits on. */
+/* Grip centre for handle `h`, pushed out by exactly half a grip so the grip
+ * sits outside the canvas with its inner corner on the corner it marks.
+ * Rounded because these are screen pixels: draw_grip wants whole ones. */
 static void grip_pos(Rect box, Handle h, double *x, double *y)
 {
-    double out = HANDLE_PX / 2 + GRIP_GAP;
     rect_handle_pos(box, h, x, y);
-    if      (*x <= box.x)         *x -= out;
-    else if (*x >= box.x + box.w) *x += out;
-    if      (*y <= box.y)         *y -= out;
-    else if (*y >= box.y + box.h) *y += out;
+    if      (*x <= box.x)         *x -= GRIP_OUT;
+    else if (*x >= box.x + box.w) *x += GRIP_OUT;
+    if      (*y <= box.y)         *y -= GRIP_OUT;
+    else if (*y >= box.y + box.h) *y += GRIP_OUT;
+    *x = round(*x);
+    *y = round(*y);
 }
 
 static Handle grip_hit(App *a, double x, double y)
@@ -357,23 +365,42 @@ static void on_grip_motion(GtkEventControllerMotion *ctrl,
 
 /* ---- input --------------------------------------------------------------- */
 
-static GdkCursor *pencil_cursor(void)
+/* Cursors drawn from bundled art, because no cursor theme ships a pencil and
+ * none of these would land its hot point on the tool's tip if it did.  The
+ * hot point is given in the art's own 24-unit coordinates. */
+#define CURSOR_PX 24
+
+static const struct { const char *name, *file; int hot_x, hot_y; } ART_CURSORS[] = {
+    { "pencil", "/org/paintly/cursors/pencil.svg", 2, 22 },
+    { "brush",  "/org/paintly/cursors/brush.svg",  2, 22 },
+    { "eraser", "/org/paintly/cursors/eraser.svg", 2, 22 },
+    { "fill",   "/org/paintly/cursors/fill.svg",   2, 22 },
+};
+
+/* Built on first use and kept: nothing here runs before the first frame. */
+static GdkCursor *art_cursor(const char *name)
 {
-    static GdkCursor *cur = NULL;
-    static gboolean tried = FALSE;
-    if (!tried) {
-        tried = TRUE;
-        GdkPixbuf *pb = gdk_pixbuf_new_from_resource_at_scale(
-            "/org/paintly/icons/scalable/actions/paintly-pencil.svg",
-            22, 22, TRUE, NULL);
-        if (pb) {
-            GdkTexture *tex = gdk_texture_new_for_pixbuf(pb);
-            cur = gdk_cursor_new_from_texture(tex, 1, 21, NULL);  /* tip: lower-left */
-            g_object_unref(tex);
-            g_object_unref(pb);
+    static GdkCursor *cache[G_N_ELEMENTS(ART_CURSORS)];
+    static gboolean   tried[G_N_ELEMENTS(ART_CURSORS)];
+
+    for (guint i = 0; i < G_N_ELEMENTS(ART_CURSORS); i++) {
+        if (g_strcmp0(name, ART_CURSORS[i].name) != 0)
+            continue;
+        if (!tried[i]) {
+            tried[i] = TRUE;
+            GdkPixbuf *pb = gdk_pixbuf_new_from_resource_at_scale(
+                ART_CURSORS[i].file, CURSOR_PX, CURSOR_PX, TRUE, NULL);
+            if (pb) {
+                GdkTexture *tex = gdk_texture_new_for_pixbuf(pb);
+                cache[i] = gdk_cursor_new_from_texture(tex, ART_CURSORS[i].hot_x,
+                                                       ART_CURSORS[i].hot_y, NULL);
+                g_object_unref(tex);
+                g_object_unref(pb);
+            }
         }
+        return cache[i];
     }
-    return cur;
+    return NULL;
 }
 
 static void set_cursor(App *a, const char *name)
@@ -381,9 +408,9 @@ static void set_cursor(App *a, const char *name)
     if (g_strcmp0(name, a->cursor_name) == 0)
         return;
     a->cursor_name = name;
-    GdkCursor *pencil = g_strcmp0(name, "pencil") == 0 ? pencil_cursor() : NULL;
-    if (pencil)
-        gtk_widget_set_cursor(a->canvas, pencil);
+    GdkCursor *art = art_cursor(name);
+    if (art)
+        gtk_widget_set_cursor(a->canvas, art);
     else
         gtk_widget_set_cursor_from_name(a->canvas, name);
 }

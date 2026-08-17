@@ -69,6 +69,12 @@ void document_drop_floating  (Document *doc);   // discard, don't stamp down
 void document_delete_selection(Document *doc);
 /* Move the floating pixels to (x, y), clamped so they stay on the canvas. */
 void document_move_floating  (Document *doc, double x, double y);
+/* A fresh copy of the selected pixels - the floating ones if there are any,
+ * otherwise straight off the active layer.  NULL when nothing is selected;
+ * the caller owns the surface. */
+cairo_surface_t *document_copy_selection(Document *doc);
+/* Drop `src` in at (x, y) as a floating selection, ready to be moved. */
+void document_paste(Document *doc, cairo_surface_t *src, int x, int y);
 
 /* ---- selection geometry ------------------------------------------------- */
 

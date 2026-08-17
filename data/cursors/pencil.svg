@@ -1,0 +1,10 @@
+<!-- Cursor art: 24x24, hot point (2, 22) - the graphite tip. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <g stroke-linejoin="round" stroke-width="1.3">
+    <path d="M2 22 4.44 15.96 14.34 6.06A2.55 2.55 0 0 1 17.94 9.66L8.04 19.56Z"
+          fill="#ffffff" stroke="#ffffff" stroke-width="3"/>
+    <path d="M2 22 4.44 15.96 14.34 6.06A2.55 2.55 0 0 1 17.94 9.66L8.04 19.56Z"
+          fill="#f4f4f4" stroke="#1e1e1e"/>
+    <path d="M2 22 4.44 15.96 8.04 19.56Z" fill="#1e1e1e" stroke="#1e1e1e"/>
+  </g>
+</svg>

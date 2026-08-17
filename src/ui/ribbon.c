@@ -38,6 +38,19 @@ static void tool_toggled(GtkToggleButton *btn, gpointer user_data)
     app_set_tool(user_data, g_object_get_data(G_OBJECT(btn), "tool-id"));
 }
 
+/* Selecting a tool from code - paste, select-all - must move the radio too;
+ * app_set_tool() short-circuits the resulting "toggled", so this can't loop. */
+void ribbon_sync_tool(App *a)
+{
+    if (!a->tool_btns || !a->tool)
+        return;
+    for (guint i = 0; i < a->tool_btns->len; i++) {
+        GtkWidget *b = g_ptr_array_index(a->tool_btns, i);
+        if (g_strcmp0(g_object_get_data(G_OBJECT(b), "tool-id"), a->tool->id) == 0)
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(b), TRUE);
+    }
+}
+
 static GtkWidget *tool_button(App *a, const char *tool_id, gboolean large)
 {
     Tool *t = tools_find(tool_id);
@@ -61,6 +74,7 @@ static GtkWidget *tool_button(App *a, const char *tool_id, gboolean large)
 
     g_signal_connect(btn, "toggled", G_CALLBACK(tool_toggled), a);
     ribbon_hand_cursor(btn);
+    g_ptr_array_add(a->tool_btns, btn);
     return btn;
 }
 

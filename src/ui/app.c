@@ -32,6 +32,7 @@ void app_set_tool(App *a, const char *tool_id)
     if (a->tool && a->tool->deactivate)
         a->tool->deactivate(a->tool, a);
     a->tool = t;
+    ribbon_sync_tool(a);
     canvas_repaint(a);
 }
 
@@ -59,6 +60,32 @@ void app_load_document(App *a, Document *doc, const char *path)
 
 /* ---- file open ----------------------------------------------------------- */
 
+/* Read an image into a fresh document; reports failure to the user. */
+static void load_image_path(App *a, const char *path)
+{
+    GError *err = NULL;
+    GdkPixbuf *pb = gdk_pixbuf_new_from_file(path, &err);
+    if (!pb) {
+        show_error(a, err->message);
+        g_error_free(err);
+        return;
+    }
+
+    /* The image becomes the Background layer of a fresh document */
+    Document *doc = document_new(gdk_pixbuf_get_width(pb),
+                                 gdk_pixbuf_get_height(pb));
+    cairo_t *cr = cairo_create(document_active_layer(doc)->surface);
+    gdk_cairo_set_source_pixbuf(cr, pb, 0, 0);
+    /* SOURCE copies the image's alpha verbatim instead of blending it over
+     * the layer's opaque white, which would flatten away any transparency. */
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+    g_object_unref(pb);
+
+    app_load_document(a, doc, path);
+}
+
 static void on_open_done(GObject *source, GAsyncResult *res, gpointer data)
 {
     App *a = data;
@@ -71,26 +98,7 @@ static void on_open_done(GObject *source, GAsyncResult *res, gpointer data)
         show_error(a, "Only local files can be opened.");
         return;
     }
-
-    GError *err = NULL;
-    GdkPixbuf *pb = gdk_pixbuf_new_from_file(path, &err);
-    if (!pb) {
-        show_error(a, err->message);
-        g_error_free(err);
-        g_free(path);
-        return;
-    }
-
-    /* The image becomes the Background layer of a fresh document */
-    Document *doc = document_new(gdk_pixbuf_get_width(pb),
-                                 gdk_pixbuf_get_height(pb));
-    cairo_t *cr = cairo_create(document_active_layer(doc)->surface);
-    gdk_cairo_set_source_pixbuf(cr, pb, 0, 0);
-    cairo_paint(cr);
-    cairo_destroy(cr);
-    g_object_unref(pb);
-
-    app_load_document(a, doc, path);
+    load_image_path(a, path);
     g_free(path);
 }
 
@@ -221,6 +229,7 @@ static void act_save_as(GSimpleAction *action, GVariant *param, gpointer user_da
 
 /* ---- unsaved changes ----------------------------------------------------- */
 
+/* Button indices, in the order they are handed to the alert dialog. */
 typedef enum { CONFIRM_CANCEL, CONFIRM_DISCARD, CONFIRM_SAVE } ConfirmChoice;
 
 static gboolean save_now_idle(gpointer data)
@@ -229,45 +238,15 @@ static gboolean save_now_idle(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-static void confirm_closed(GtkWindow *dlg, gpointer data)
+static void on_confirm_done(GObject *source, GAsyncResult *res, gpointer data)
 {
     App *a = data;
-    switch (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(dlg), "choice"))) {
-    case CONFIRM_DISCARD: run_pending(a);                  break;
-    case CONFIRM_SAVE:    g_idle_add(save_now_idle, a);    break;
+    /* A dismissed dialog reports the cancel button, so -1 never reaches here. */
+    switch (gtk_alert_dialog_choose_finish(GTK_ALERT_DIALOG(source), res, NULL)) {
+    case CONFIRM_DISCARD: run_pending(a);               break;
+    case CONFIRM_SAVE:    g_idle_add(save_now_idle, a); break;
     default:              a->pending = NULL;
     }
-}
-
-static void confirm_clicked(GtkButton *btn, gpointer data)
-{
-    GtkWidget *dlg = GTK_WIDGET(gtk_widget_get_root(GTK_WIDGET(btn)));
-    g_object_set_data(G_OBJECT(dlg), "choice",
-                      g_object_get_data(G_OBJECT(btn), "choice"));
-    gtk_window_destroy(GTK_WINDOW(dlg));
-}
-
-static gboolean confirm_key(GtkEventControllerKey *key, guint keyval,
-                            guint keycode, GdkModifierType state, gpointer data)
-{
-    if (keyval != GDK_KEY_Escape)
-        return FALSE;
-    gtk_window_destroy(GTK_WINDOW(
-        gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(key))));
-    return TRUE;
-}
-
-static GtkWidget *confirm_button(const char *label, ConfirmChoice choice,
-                                 const char *accent)
-{
-    GtkWidget *b = gtk_button_new_with_label(label);
-    gtk_widget_add_css_class(b, "dialog-btn");
-    if (accent)
-        gtk_widget_add_css_class(b, accent);
-    g_object_set_data(G_OBJECT(b), "choice", GINT_TO_POINTER(choice));
-    g_signal_connect(b, "clicked", G_CALLBACK(confirm_clicked), NULL);
-    ribbon_hand_cursor(b);
-    return b;
 }
 
 static void confirm_unsaved(App *a, AppContinue then)
@@ -280,50 +259,17 @@ static void confirm_unsaved(App *a, AppContinue then)
 
     char *base = a->doc->filepath ? g_path_get_basename(a->doc->filepath)
                                   : g_strdup("Untitled");
-    char *msg = g_strdup_printf("Save changes to “%s”?", base);
+    GtkAlertDialog *dlg = gtk_alert_dialog_new("Save changes to “%s”?", base);
+    gtk_alert_dialog_set_detail(dlg,
+        "Your changes will be lost if you don't save them.");
+    gtk_alert_dialog_set_buttons(dlg,
+        (const char *[]){ "Cancel", "Discard", "Save", NULL });
+    gtk_alert_dialog_set_cancel_button (dlg, CONFIRM_CANCEL);
+    gtk_alert_dialog_set_default_button(dlg, CONFIRM_SAVE);
+    gtk_alert_dialog_choose(dlg, a->window, NULL, on_confirm_done, a);
 
-    GtkWidget *dlg = gtk_window_new();
-    gtk_window_set_title(GTK_WINDOW(dlg), "Paintly");
-    gtk_window_set_transient_for(GTK_WINDOW(dlg), a->window);
-    gtk_window_set_destroy_with_parent(GTK_WINDOW(dlg), TRUE);
-    gtk_window_set_modal(GTK_WINDOW(dlg), TRUE);
-    gtk_window_set_resizable(GTK_WINDOW(dlg), FALSE);
-
-    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_add_css_class(box, "dialog");
-
-    GtkWidget *title = gtk_label_new(msg);
-    gtk_widget_add_css_class(title, "dialog-title");
-    gtk_label_set_wrap(GTK_LABEL(title), TRUE);
-    gtk_box_append(GTK_BOX(box), title);
-
-    GtkWidget *detail =
-        gtk_label_new("Your changes will be lost if you don't save them.");
-    gtk_widget_add_css_class(detail, "dialog-detail");
-    gtk_label_set_wrap(GTK_LABEL(detail), TRUE);
-    gtk_box_append(GTK_BOX(box), detail);
-
-    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    gtk_widget_set_halign(row, GTK_ALIGN_END);
-    gtk_box_append(GTK_BOX(row), confirm_button("Cancel", CONFIRM_CANCEL, NULL));
-    gtk_box_append(GTK_BOX(row), confirm_button("Discard", CONFIRM_DISCARD,
-                                                "danger"));
-    GtkWidget *save = confirm_button("Save", CONFIRM_SAVE, "suggested");
-    gtk_box_append(GTK_BOX(row), save);
-    gtk_box_append(GTK_BOX(box), row);
-
-    gtk_window_set_child(GTK_WINDOW(dlg), box);
-    gtk_window_set_default_widget(GTK_WINDOW(dlg), save);
-    gtk_widget_grab_focus(save);
-
-    GtkEventController *keys = gtk_event_controller_key_new();
-    g_signal_connect(keys, "key-pressed", G_CALLBACK(confirm_key), NULL);
-    gtk_widget_add_controller(dlg, keys);
-    g_signal_connect(dlg, "destroy", G_CALLBACK(confirm_closed), a);
-
-    gtk_window_present(GTK_WINDOW(dlg));
+    g_object_unref(dlg);
     g_free(base);
-    g_free(msg);
 }
 
 /* ---- other actions ------------------------------------------------------- */
@@ -415,6 +361,86 @@ static void act_delete_selection(GSimpleAction *action, GVariant *param,
     after_pixels_changed(a);
 }
 
+/* ---- clipboard ----------------------------------------------------------- */
+
+/* GDK_MEMORY_DEFAULT is laid out exactly like CAIRO_FORMAT_ARGB32, so both
+ * conversions are a straight copy of the pixels. */
+static GdkTexture *texture_from_surface(cairo_surface_t *s)
+{
+    cairo_surface_flush(s);
+    int stride = cairo_image_surface_get_stride(s);
+    int height = cairo_image_surface_get_height(s);
+    GBytes *bytes = g_bytes_new(cairo_image_surface_get_data(s),
+                                (gsize) stride * height);
+    GdkTexture *t = gdk_memory_texture_new(cairo_image_surface_get_width(s),
+                                           height, GDK_MEMORY_DEFAULT,
+                                           bytes, stride);
+    g_bytes_unref(bytes);
+    return t;
+}
+
+static cairo_surface_t *surface_from_texture(GdkTexture *t)
+{
+    cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+                                                    gdk_texture_get_width(t),
+                                                    gdk_texture_get_height(t));
+    cairo_surface_flush(s);
+    gdk_texture_download(t, cairo_image_surface_get_data(s),
+                         cairo_image_surface_get_stride(s));
+    cairo_surface_mark_dirty(s);
+    return s;
+}
+
+/* The system clipboard, so a copy is usable outside Paintly too. */
+static gboolean copy_selection(App *a)
+{
+    cairo_surface_t *s = document_copy_selection(a->doc);
+    if (!s)
+        return FALSE;                       /* nothing selected */
+    GdkTexture *t = texture_from_surface(s);
+    gdk_clipboard_set_texture(gtk_widget_get_clipboard(GTK_WIDGET(a->window)), t);
+    g_object_unref(t);
+    cairo_surface_destroy(s);
+    return TRUE;
+}
+
+static void act_copy(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+    copy_selection(user_data);
+}
+
+static void act_cut(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+    App *a = user_data;
+    if (!copy_selection(a))
+        return;
+    document_delete_selection(a->doc);
+    after_pixels_changed(a);
+}
+
+static void on_paste_done(GObject *source, GAsyncResult *res, gpointer data)
+{
+    App *a = data;
+    GdkTexture *t = gdk_clipboard_read_texture_finish(GDK_CLIPBOARD(source),
+                                                      res, NULL);
+    if (!t)
+        return;                             /* nothing image-shaped to paste */
+    cairo_surface_t *s = surface_from_texture(t);
+    g_object_unref(t);
+
+    app_set_tool(a, "select");    /* the pasted pixels are draggable at once */
+    document_paste(a->doc, s, 0, 0);
+    cairo_surface_destroy(s);
+    after_pixels_changed(a);
+}
+
+static void act_paste(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+    App *a = user_data;
+    gdk_clipboard_read_texture_async(
+        gtk_widget_get_clipboard(GTK_WIDGET(a->window)), NULL, on_paste_done, a);
+}
+
 static void act_zoom_in(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
     statusbar_zoom_step(user_data, +1);
@@ -450,6 +476,9 @@ static const GActionEntry WIN_ACTIONS[] = {
     { "save-as",          act_save_as },
     { "undo",             act_undo },
     { "redo",             act_redo },
+    { "cut",              act_cut },
+    { "copy",             act_copy },
+    { "paste",            act_paste },
     { "select-all",       act_select_all },
     { "deselect",         act_deselect },
     { "delete-selection", act_delete_selection },
@@ -492,6 +521,10 @@ static GMenuModel *build_menubar(void)
         { "_Undo", "win.undo" },
         { "_Redo", "win.redo" } }, 2);
     menu_section(edit, (const char *const[][2]) {
+        { "Cu_t",   "win.cut" },
+        { "_Copy",  "win.copy" },
+        { "_Paste", "win.paste" } }, 3);
+    menu_section(edit, (const char *const[][2]) {
         { "Select _All",      "win.select-all" },
         { "D_eselect",        "win.deselect" },
         { "_Delete Selection", "win.delete-selection" } }, 3);
@@ -530,6 +563,9 @@ void app_startup(GtkApplication *gapp, gpointer user_data)
         { "win.save-as",          { "<Control><Shift>s", NULL } },
         { "win.undo",             { "<Control>z", NULL } },
         { "win.redo",             { "<Control>y", "<Control><Shift>z", NULL } },
+        { "win.cut",              { "<Control>x", NULL } },
+        { "win.copy",             { "<Control>c", NULL } },
+        { "win.paste",            { "<Control>v", NULL } },
         { "win.select-all",       { "<Control>a", NULL } },
         { "win.deselect",         { "Escape", NULL } },
         { "win.delete-selection", { "Delete", "BackSpace", NULL } },
@@ -586,6 +622,7 @@ void app_activate(GtkApplication *gapp, gpointer user_data)
     gdk_rgba_parse(&a->secondary, "#ffffff");
     a->tool = tools_find("pencil");
     a->layer_thumbs = g_ptr_array_new();
+    a->tool_btns    = g_ptr_array_new();
 
     GtkWidget *win = gtk_application_window_new(gapp);
     a->window = GTK_WINDOW(win);
@@ -627,4 +664,46 @@ void app_activate(GtkApplication *gapp, gpointer user_data)
 
     if (g_getenv("PAINTLY_BENCH"))
         g_idle_add(bench_quit, gapp);
+}
+
+/* ---- opening from the command line --------------------------------------- */
+
+/* Hand a file to a window of its own: one document per process, so extra
+ * arguments become extra Paintlys rather than fighting over this one. */
+static void spawn_instance(GFile *file)
+{
+    char *path = g_file_get_path(file);
+    if (!path)
+        return;                     /* non-local: nothing to hand over */
+    char *self = g_file_read_link("/proc/self/exe", NULL);
+    if (!self)
+        self = g_find_program_in_path("paintly");
+    if (self) {
+        char *argv[] = { self, path, NULL };
+        g_spawn_async(NULL, argv, NULL, G_SPAWN_DEFAULT, NULL, NULL, NULL, NULL);
+    }
+    g_free(self);
+    g_free(path);
+}
+
+/* `paintly image.png`, or a file manager's Open With. GApplication sends the
+ * arguments here instead of emitting ::activate, so the window is built here.
+ * The document it lands on is always the untouched default one - this process
+ * was started by this command line - so there is nothing to save first. */
+void app_open(GtkApplication *gapp, GFile **files, int n_files,
+              const char *hint, gpointer user_data)
+{
+    App *a = user_data;
+    app_activate(gapp, a);          /* the window has to exist to load into */
+
+    for (int i = 1; i < n_files; i++)
+        spawn_instance(files[i]);
+
+    char *path = g_file_get_path(files[0]);
+    if (!path) {
+        show_error(a, "Only local files can be opened.");
+        return;
+    }
+    load_image_path(a, path);
+    g_free(path);
 }

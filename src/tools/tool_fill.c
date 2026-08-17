@@ -12,8 +12,9 @@ static void fill_begin(Tool *t, ToolContext *c)
 }
 
 Tool tool_fill = {
-    .id    = "fill",
-    .label = "Fill - flood an area with color",
-    .icon  = "paintly-fill",
-    .begin = fill_begin,
+    .id     = "fill",
+    .label  = "Fill - flood an area with color",
+    .icon   = "paintly-fill",
+    .cursor = "fill",
+    .begin  = fill_begin,
 };
