@@ -140,7 +140,7 @@ void resize_dialog_show(App *a)
     ResizeDialog *rd = g_new0(ResizeDialog, 1);
     rd->app       = a;
     rd->selection = d->has_selection;
-    rd->pixels    = TRUE;
+    rd->pixels    = FALSE;      /* percentage is the friendlier default */
 
     Rect sel = document_selection_rect(d);
     rd->base_w = rd->selection ? sel.w : d->width;
@@ -160,29 +160,11 @@ void resize_dialog_show(App *a)
     gtk_widget_set_margin_start (box, 18);
     gtk_widget_set_margin_end   (box, 18);
 
-    char buf[96];
-    g_snprintf(buf, sizeof buf, "%s is %d × %d px",
-               rd->selection ? "Selection" : "Image", rd->base_w, rd->base_h);
-    GtkWidget *current = gtk_label_new(buf);
-    gtk_label_set_xalign(GTK_LABEL(current), 0);
-    gtk_box_append(GTK_BOX(box), current);
-
-    /* -- pixels / percentage --------------------------------------------- */
-    GtkWidget *modes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
-    rd->px_radio = gtk_check_button_new_with_label("Pixels");
-    GtkWidget *pct_radio = gtk_check_button_new_with_label("Percentage");
-    gtk_check_button_set_group(GTK_CHECK_BUTTON(pct_radio),
-                               GTK_CHECK_BUTTON(rd->px_radio));
-    gtk_check_button_set_active(GTK_CHECK_BUTTON(rd->px_radio), TRUE);
-    gtk_box_append(GTK_BOX(modes), rd->px_radio);
-    gtk_box_append(GTK_BOX(modes), pct_radio);
-    gtk_box_append(GTK_BOX(box), modes);
-
-    /* -- the two fields --------------------------------------------------- */
-    rd->w_spin = gtk_spin_button_new_with_range(1, RESIZE_MAX_PX, 1);
-    rd->h_spin = gtk_spin_button_new_with_range(1, RESIZE_MAX_PX, 1);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(rd->w_spin), rd->base_w);
-    gtk_spin_button_set_value(GTK_SPIN_BUTTON(rd->h_spin), rd->base_h);
+    /* -- the two fields, in percent of the size below --------------------- */
+    rd->w_spin = gtk_spin_button_new_with_range(1, RESIZE_MAX_PCT, 1);
+    rd->h_spin = gtk_spin_button_new_with_range(1, RESIZE_MAX_PCT, 1);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(rd->w_spin), 100);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(rd->h_spin), 100);
     gtk_editable_set_width_chars(GTK_EDITABLE(rd->w_spin), 7);
     gtk_editable_set_width_chars(GTK_EDITABLE(rd->h_spin), 7);
 
@@ -191,9 +173,32 @@ void resize_dialog_show(App *a)
     gtk_box_append(GTK_BOX(fields), field("Height", rd->h_spin));
     gtk_box_append(GTK_BOX(box), fields);
 
+    /* -- pixels / percentage ---------------------------------------------- */
+    GtkWidget *modes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    rd->px_radio = gtk_check_button_new_with_label("Pixels");
+    GtkWidget *pct_radio = gtk_check_button_new_with_label("Percentage");
+    gtk_check_button_set_group(GTK_CHECK_BUTTON(pct_radio),
+                               GTK_CHECK_BUTTON(rd->px_radio));
+    gtk_check_button_set_active(GTK_CHECK_BUTTON(pct_radio), TRUE);
+    gtk_box_append(GTK_BOX(modes), rd->px_radio);
+    gtk_box_append(GTK_BOX(modes), pct_radio);
+    gtk_box_append(GTK_BOX(box), modes);
+
+    /* -- aspect lock, with the size 100 % refers to opposite it ------------ */
+    GtkWidget *foot = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     rd->ratio = gtk_check_button_new_with_label("Maintain aspect ratio");
     gtk_check_button_set_active(GTK_CHECK_BUTTON(rd->ratio), TRUE);
-    gtk_box_append(GTK_BOX(box), rd->ratio);
+    gtk_box_append(GTK_BOX(foot), rd->ratio);
+
+    char buf[32];
+    g_snprintf(buf, sizeof buf, "%d × %d px", rd->base_w, rd->base_h);
+    GtkWidget *current = gtk_label_new(buf);
+    gtk_widget_add_css_class(current, "ribbon-group-label");
+    gtk_widget_set_hexpand(current, TRUE);
+    gtk_widget_set_valign(current, GTK_ALIGN_CENTER);
+    gtk_label_set_xalign(GTK_LABEL(current), 1.0);
+    gtk_box_append(GTK_BOX(foot), current);
+    gtk_box_append(GTK_BOX(box), foot);
 
     /* Connected last, so building the fields above fires nothing. */
     g_signal_connect(rd->px_radio, "toggled", G_CALLBACK(on_mode),  rd);

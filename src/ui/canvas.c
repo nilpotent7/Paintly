@@ -311,15 +311,35 @@ static void grip_set_cursor(App *a, const char *name)
     gtk_widget_set_cursor_from_name(overlay, name);
 }
 
+/* Clicking the workspace around the canvas dismisses the selection.  The box
+ * test is what keeps presses that bubble up from the canvas itself out. */
+static void workspace_deselect(App *a, double x, double y)
+{
+    Rect box;
+    if (!a->doc->has_selection || a->pressed || !grip_canvas_box(a, &box) ||
+        (x >= box.x && x < box.x + box.w && y >= box.y && y < box.y + box.h))
+        return;
+
+    document_deselect(a->doc);
+    canvas_repaint(a);
+    layers_panel_queue_thumbs(a);   /* a committed floater changed pixels */
+    statusbar_update(a);
+    app_update_title(a);
+}
+
 static void on_grip_press(GtkGestureClick *gesture, int n_press,
                           double x, double y, gpointer user_data)
 {
     App *a = user_data;
     double sx, sy;
     Handle h = grip_hit(a, x, y);
+
+    if (h == HANDLE_NONE) {
+        workspace_deselect(a, x, y);
+        return;
+    }
     /* One gesture at a time: a tool may already own another button. */
-    if (h == HANDLE_NONE || a->pressed ||
-        !event_surface_pos(GTK_EVENT_CONTROLLER(gesture), &sx, &sy))
+    if (a->pressed || !event_surface_pos(GTK_EVENT_CONTROLLER(gesture), &sx, &sy))
         return;
 
     a->canvas_grip = h;
