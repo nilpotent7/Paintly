@@ -59,6 +59,7 @@ void app_sync_editable(App *a)
     set_action_enabled(a, "cut", on);
     set_action_enabled(a, "paste", on);
     set_action_enabled(a, "delete-selection", on);
+    set_action_enabled(a, "resize", on);   /* resizing a selection lifts pixels */
     canvas_sync_cursor(a);
 }
 
@@ -499,6 +500,11 @@ static void act_paste(GSimpleAction *action, GVariant *param, gpointer user_data
         gtk_widget_get_clipboard(GTK_WIDGET(a->window)), NULL, on_paste_done, a);
 }
 
+static void act_resize(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+    resize_dialog_show(user_data);
+}
+
 static void act_zoom_in(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
     statusbar_zoom_step(user_data, +1);
@@ -540,6 +546,7 @@ static const GActionEntry WIN_ACTIONS[] = {
     { "select-all",       act_select_all },
     { "deselect",         act_deselect },
     { "delete-selection", act_delete_selection },
+    { "resize",           act_resize },
     { "zoom-in",          act_zoom_in },
     { "zoom-out",         act_zoom_out },
     { "zoom-reset",       act_zoom_reset },
@@ -589,6 +596,12 @@ static GMenuModel *build_menubar(void)
     g_menu_append_submenu(bar, "_Edit", G_MENU_MODEL(edit));
     g_object_unref(edit);
 
+    GMenu *image = g_menu_new();
+    menu_section(image, (const char *const[][2]) {
+        { "_Resize…", "win.resize" } }, 1);
+    g_menu_append_submenu(bar, "_Image", G_MENU_MODEL(image));
+    g_object_unref(image);
+
     GMenu *view = g_menu_new();
     menu_section(view, (const char *const[][2]) {
         { "Zoom _In",     "win.zoom-in" },
@@ -627,6 +640,7 @@ void app_startup(GtkApplication *gapp, gpointer user_data)
         { "win.select-all",       { "<Control>a", NULL } },
         { "win.deselect",         { "Escape", NULL } },
         { "win.delete-selection", { "Delete", "BackSpace", NULL } },
+        { "win.resize",           { "<Control>r", NULL } },
         { "win.zoom-in",          { "<Control>plus", "<Control>equal", NULL } },
         { "win.zoom-out",         { "<Control>minus", NULL } },
         { "win.zoom-reset",       { "<Control>0", NULL } },

@@ -25,6 +25,8 @@
     <file alias="icons/scalable/actions/paintly-shape-rect.svg">icons/paintly-shape-rect.svg</file>
     <file alias="icons/scalable/actions/paintly-shape-ellipse.svg">icons/paintly-shape-ellipse.svg</file>
     <file alias="icons/scalable/actions/paintly-shape-triangle.svg">icons/paintly-shape-triangle.svg</file>
+    <file alias="icons/scalable/actions/paintly-shape-line.svg">icons/paintly-shape-line.svg</file>
+    <file alias="icons/scalable/actions/paintly-resize.svg">icons/paintly-resize.svg</file>
     <file alias="icons/scalable/actions/paintly-size.svg">icons/paintly-size.svg</file>
     <file alias="icons/scalable/actions/paintly-layers.svg">icons/paintly-layers.svg</file>
     <file alias="icons/scalable/actions/paintly-layer-add.svg">icons/paintly-layer-add.svg</file>

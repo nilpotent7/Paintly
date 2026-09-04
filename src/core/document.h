@@ -58,6 +58,12 @@ cairo_surface_t *document_flatten(Document *doc);
 
 void document_resize_canvas(Document *doc, Rect r,
                             double red, double green, double blue, double alpha);
+/* Rescale the image: every layer is resampled to `width` x `height`, so the
+ * artwork is stretched rather than cropped or padded. */
+void document_scale_canvas(Document *doc, int width, int height);
+/* Resample the selected pixels to `width` x `height`, anchored at the
+ * selection's top-left.  They are left floating, ready to be moved. */
+void document_scale_selection(Document *doc, int width, int height);
 
 /* Selection operations.  Functions that destroy pixels push undo history
  * themselves; see each implementation for the exact policy. */

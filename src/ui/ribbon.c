@@ -78,6 +78,22 @@ static GtkWidget *tool_button(App *a, const char *tool_id, gboolean large)
     return btn;
 }
 
+/* A large ribbon button that fires a window action rather than picking a tool. */
+static GtkWidget *action_button(const char *action, const char *icon,
+                                const char *tip)
+{
+    GtkWidget *btn = gtk_button_new();
+    GtkWidget *img = gtk_image_new_from_icon_name(icon);
+    gtk_image_set_pixel_size(GTK_IMAGE(img), 26);
+    gtk_button_set_child(GTK_BUTTON(btn), img);
+    gtk_widget_add_css_class(btn, "tool-btn");
+    gtk_widget_add_css_class(btn, "tool-btn-large");
+    gtk_widget_set_tooltip_text(btn, tip);
+    gtk_actionable_set_action_name(GTK_ACTIONABLE(btn), action);
+    ribbon_hand_cursor(btn);
+    return btn;
+}
+
 static void size_changed(GtkRange *range, gpointer user_data)
 {
     App *a = user_data;
@@ -85,11 +101,72 @@ static void size_changed(GtkRange *range, gpointer user_data)
     app_restyle_floating(a);   /* a just-drawn shape follows the new width */
 }
 
+static const char *const DASH_LABELS[DASH_COUNT] = {
+    "Solid", "Dash", "Dot", "Dash-dot",
+};
+
+static void dash_toggled(GtkToggleButton *btn, gpointer user_data)
+{
+    App *a = user_data;
+    if (!gtk_toggle_button_get_active(btn))
+        return;
+    a->dash = (DashStyle) GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "dash"));
+    app_restyle_floating(a);   /* a just-drawn shape follows the new pattern */
+}
+
+/* A sample of the pattern its button selects, drawn with the real thing. */
+static void dash_sample_draw(GtkDrawingArea *area, cairo_t *cr,
+                             int width, int height, gpointer user_data)
+{
+    cairo_set_source_rgb(cr, 0.23, 0.23, 0.23);
+    cairo_set_line_width(cr, 2);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    tool_set_dash(cr, (DashStyle) GPOINTER_TO_INT(user_data), 2, 0);
+    cairo_move_to(cr, 3, height / 2.0);
+    cairo_line_to(cr, width - 3, height / 2.0);
+    cairo_stroke(cr);
+}
+
+/* Radio buttons rather than a GtkDropDown.  A dropdown opens a second popover
+ * inside this one, and once it had been used the Stroke popover stopped
+ * answering outside clicks - only Escape would close it.  Buttons keep the
+ * popover un-nested, and show the pattern instead of naming it. */
+static GtkWidget *dash_row(App *a)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_widget_set_halign(row, GTK_ALIGN_CENTER);
+    GtkToggleButton *leader = NULL;
+
+    for (int d = 0; d < DASH_COUNT; d++) {
+        GtkWidget *btn = gtk_toggle_button_new();
+        GtkWidget *sample = gtk_drawing_area_new();
+        gtk_widget_set_size_request(sample, 34, 16);
+        gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(sample), dash_sample_draw,
+                                       GINT_TO_POINTER(d), NULL);
+        gtk_button_set_child(GTK_BUTTON(btn), sample);
+        gtk_widget_add_css_class(btn, "tool-btn");
+        gtk_widget_set_tooltip_text(btn, DASH_LABELS[d]);
+        g_object_set_data(G_OBJECT(btn), "dash", GINT_TO_POINTER(d));
+
+        if (leader)
+            gtk_toggle_button_set_group(GTK_TOGGLE_BUTTON(btn), leader);
+        else
+            leader = GTK_TOGGLE_BUTTON(btn);
+        if ((DashStyle) d == a->dash)
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), TRUE);
+
+        g_signal_connect(btn, "toggled", G_CALLBACK(dash_toggled), a);
+        ribbon_hand_cursor(btn);
+        gtk_box_append(GTK_BOX(row), btn);
+    }
+    return row;
+}
+
 static GtkWidget *size_group(App *a)
 {
     GtkWidget *mb = gtk_menu_button_new();
     gtk_widget_add_css_class(mb, "tool-btn");
-    gtk_widget_set_tooltip_text(mb, "Stroke width");
+    gtk_widget_set_tooltip_text(mb, "Stroke width and dash pattern");
     GtkWidget *img = gtk_image_new_from_icon_name("paintly-size");
     gtk_image_set_pixel_size(GTK_IMAGE(img), 20);
     gtk_menu_button_set_child(GTK_MENU_BUTTON(mb), img);
@@ -110,6 +187,10 @@ static GtkWidget *size_group(App *a)
     gtk_widget_set_size_request(scale, 180, -1);
     g_signal_connect(scale, "value-changed", G_CALLBACK(size_changed), a);
     gtk_box_append(GTK_BOX(box), scale);
+
+    gtk_box_append(GTK_BOX(box), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL));
+    gtk_box_append(GTK_BOX(box), gtk_label_new("Dash"));
+    gtk_box_append(GTK_BOX(box), dash_row(a));
 
     gtk_popover_set_child(GTK_POPOVER(pop), box);
     gtk_menu_button_set_popover(GTK_MENU_BUTTON(mb), pop);
@@ -139,6 +220,12 @@ GtkWidget *ribbon_new(App *a)
     GtkWidget *sel_btn = tool_button(a, "select", TRUE);
     gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Selection", sel_btn));
 
+    /* -- Image ----------------------------------------------------------- */
+    GtkWidget *resize_btn = action_button("win.resize", "paintly-resize",
+                                          "Resize the selection, or the whole "
+                                          "image when nothing is selected");
+    gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Image", resize_btn));
+
     /* -- Tools (2-column grid) ---------- */
     GtkWidget *grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(grid), 2);
@@ -153,15 +240,18 @@ GtkWidget *ribbon_new(App *a)
     GtkWidget *brush = tool_button(a, "brush", TRUE);
     gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Brushes", brush));
 
-    /* -- Shapes ---------------------------------------------------------- */
-    GtkWidget *shapes = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
-    gtk_box_append(GTK_BOX(shapes), tool_button(a, "shape-rect",     FALSE));
-    gtk_box_append(GTK_BOX(shapes), tool_button(a, "shape-ellipse",  FALSE));
-    gtk_box_append(GTK_BOX(shapes), tool_button(a, "shape-triangle", FALSE));
+    /* -- Shapes (2-column grid, matching Tools) --------------------------- */
+    GtkWidget *shapes = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(shapes), 2);
+    gtk_grid_set_column_spacing(GTK_GRID(shapes), 2);
+    gtk_grid_attach(GTK_GRID(shapes), tool_button(a, "shape-rect",     FALSE), 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(shapes), tool_button(a, "shape-ellipse",  FALSE), 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(shapes), tool_button(a, "shape-triangle", FALSE), 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(shapes), tool_button(a, "shape-line",     FALSE), 1, 1, 1, 1);
     gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Shapes", shapes));
 
-    /* -- Size ------------------------------------------------------------ */
-    gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Size", size_group(a)));
+    /* -- Stroke ---------------------------------------------------------- */
+    gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Stroke", size_group(a)));
 
     /* -- Colors (built in colors.c) -------------------------------------- */
     gtk_box_append(GTK_BOX(ribbon), colors_group_new(a));

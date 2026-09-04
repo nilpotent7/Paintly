@@ -1,5 +1,6 @@
 #include "tool.h"
 #include "../core/history.h"
+#include <math.h>
 
 typedef struct {
     cairo_operator_t  op;
@@ -21,6 +22,7 @@ static cairo_t *stroke_cr(Tool *t, ToolContext *c)
     cairo_set_line_width(cr, MAX(1.0, c->size));
     cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
     cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+    tool_set_dash(cr, c->app->dash, c->size, c->app->dash_phase);
     return cr;
 }
 
@@ -28,6 +30,7 @@ static void stroke_begin(Tool *t, ToolContext *c)
 {
     /* Snapshot the layer before the first pixel changes. */
     history_push(c->doc);
+    c->app->dash_phase = 0;
 
     /* A zero-length line draws nothing in cairo, so a plain click needs an
      * explicit dot. */
@@ -45,6 +48,9 @@ static void stroke_motion(Tool *t, ToolContext *c)
     cairo_line_to(cr, c->x, c->y);
     cairo_stroke(cr);
     cairo_destroy(cr);
+    /* Advance the phase, or the pattern would restart at every motion event
+     * and a dashed freehand stroke would come out ragged. */
+    c->app->dash_phase += hypot(c->x - c->last_x, c->y - c->last_y);
     canvas_repaint(c->app);
 }
 

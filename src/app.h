@@ -10,6 +10,11 @@ typedef struct App  App;
 
 typedef void (*AppContinue)(App *a);
 
+/* Stroke dash patterns, in the order the ribbon lists them. */
+typedef enum {
+    DASH_SOLID, DASH_DASH, DASH_DOT, DASH_DASH_DOT, DASH_COUNT
+} DashStyle;
+
 struct App {
     GtkApplication *gapp;
     GtkWindow      *window;
@@ -20,6 +25,8 @@ struct App {
     GdkRGBA  primary;      /* left mouse button color  */
     GdkRGBA  secondary;    /* right mouse button color */
     double   brush_size;   /* stroke width in canvas pixels */
+    DashStyle dash;        /* dash pattern every stroked line follows */
+    double   dash_phase;   /* distance drawn so far in the current stroke */
 
     /* --- canvas --------------------------------------------------------- */
     GtkWidget *canvas;     /* GtkDrawingArea, exactly the size of the image */
@@ -80,6 +87,11 @@ void canvas_sync_cursor(App *a);        /* after the edit lock changed  */
 void canvas_view_origin(App *a, double *x, double *y);
 void canvas_update_size(App *a);        /* after zoom/document change   */
 void canvas_set_zoom(App *a, double zoom);
+
+/* ui/resize_dialog.c */
+/* Ask for a new size - in pixels or as a percentage - and apply it to the
+ * selection if there is one, otherwise to the whole image. */
+void resize_dialog_show(App *a);
 
 /* ui/ribbon.c */
 GtkWidget *ribbon_new(App *a);

@@ -192,6 +192,60 @@ void document_resize_canvas(Document *doc, Rect r,
     doc->modified = TRUE;
 }
 
+void document_scale_canvas(Document *doc, int width, int height)
+{
+    width  = MAX(1, width);
+    height = MAX(1, height);
+    if (width == doc->width && height == doc->height)
+        return;
+
+    /* Stamp first, snapshot second - same reason as document_resize_canvas():
+     * a snapshot taken before the stamp would not hold the floating pixels,
+     * so one undo would take them along with the rescale. */
+    document_deselect(doc);
+    history_push_canvas(doc);
+
+    double sx = (double) width / doc->width, sy = (double) height / doc->height;
+    for (guint i = 0; i < doc->layers->len; i++) {
+        Layer *l = g_ptr_array_index(doc->layers, i);
+        cairo_surface_t *s =
+            cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+        cairo_t *cr = cairo_create(s);
+
+        cairo_scale(cr, sx, sy);
+        cairo_set_source_surface(cr, l->surface, 0, 0);
+        /* PAD keeps the outermost row of pixels from fading into the
+         * transparent edge the resample would otherwise sample. */
+        cairo_pattern_set_extend(cairo_get_source(cr), CAIRO_EXTEND_PAD);
+        cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_paint(cr);
+
+        cairo_destroy(cr);
+        cairo_surface_destroy(l->surface);
+        l->surface = s;
+    }
+    doc->width  = width;
+    doc->height = height;
+    doc->modified = TRUE;
+}
+
+/* The grip drag already resamples a selection to an arbitrary rect, so this is
+ * that machinery driven from a number instead of a pointer: SE holds the
+ * top-left still, and begin() lifts and snapshots on the way in. */
+void document_scale_selection(Document *doc, int width, int height)
+{
+    if (!doc->has_selection || width < 1 || height < 1)
+        return;
+    Rect r = document_selection_rect(doc);
+    if (width == r.w && height == r.h)
+        return;
+
+    document_resize_begin(doc, HANDLE_SE);
+    document_resize_to(doc, (Rect){ r.x, r.y, width, height });
+    document_resize_end(doc);
+}
+
 /* ---- selection ---------------------------------------------------------- */
 
 void document_select_all(Document *doc)

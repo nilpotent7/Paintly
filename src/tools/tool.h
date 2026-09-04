@@ -41,7 +41,12 @@ extern Tool tool_fill;
 extern Tool tool_shape_rect;
 extern Tool tool_shape_ellipse;
 extern Tool tool_shape_triangle;
+extern Tool tool_shape_line;
 extern Tool tool_select;
 
 Tool **tools_all (int *count);
 Tool  *tools_find(const char *id);
+
+/* Set `style` on `cr`, with the dash lengths scaled to the stroke width.
+ * `offset` carries the pattern across the segments of one freehand stroke. */
+void tool_set_dash(cairo_t *cr, DashStyle style, double width, double offset);
