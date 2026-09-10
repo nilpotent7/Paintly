@@ -5,7 +5,7 @@ int main(int argc, char **argv)
     App *app = g_new0(App, 1);
     /* NON_UNIQUE: every launch is its own process and its own window.
      * HANDLES_OPEN: file arguments arrive at ::open instead of ::activate. */
-    app->gapp = gtk_application_new("org.paintly.Paintly",
+    app->gapp = gtk_application_new("io.github.nilpotent7.Paintly",
                                     G_APPLICATION_NON_UNIQUE |
                                     G_APPLICATION_HANDLES_OPEN);
     g_signal_connect(app->gapp, "startup",  G_CALLBACK(app_startup),  app);

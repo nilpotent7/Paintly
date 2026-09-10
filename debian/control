@@ -1,0 +1,21 @@
+Source: paintly
+Section: graphics
+Priority: optional
+Maintainer: Nilpotent <nilpotent7@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               pkg-config,
+               libgtk-4-dev,
+               libglib2.0-dev-bin,
+               desktop-file-utils
+Standards-Version: 4.7.0
+Homepage: https://github.com/nilpotent7/Paintly
+Rules-Requires-Root: no
+
+Package: paintly
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Suggests: paintly-nautilus
+Description: fast, simple raster paint program
+ A fast, simple, native GTK4 painting app, designed to be simple and get the job done!
+ .
+ Features transparency support, layers, basic shapes, and common drawing tools.
