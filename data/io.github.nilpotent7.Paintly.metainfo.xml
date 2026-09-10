@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.nilpotent7.Paintly</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+
+  <name>Paintly</name>
+  <summary>Fast, simple raster paint program</summary>
+
+  <developer id="io.github.nilpotent7">
+    <name>Nilpotent</name>
+  </developer>
+
+  <description>
+    <p>
+        A fast, simple, native GTK4 painting app, designed to be simple and get the job done!
+        Features transparency support, layers, basic shapes, and common drawing tools.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Pencil, brush, eraser, fill bucket and simple shapes</li>
+      <li>Layers with reordering, visibility toggles, per-layer opacity and live thumbnails</li>
+      <li>Dual primary/secondary colour selection on left and right mouse buttons</li>
+      <li>Undo history, selection and canvas resizing</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">io.github.nilpotent7.Paintly.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/nilpotent7/Paintly/main/AppScreenshot.png</image>
+      <caption>Editing an image in Paintly</caption>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/nilpotent7/Paintly</url>
+  <url type="bugtracker">https://github.com/nilpotent7/Paintly/issues</url>
+  <url type="vcs-browser">https://github.com/nilpotent7/Paintly</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#f6f5f4</color>
+    <color type="primary" scheme_preference="dark">#353535</color>
+  </branding>
+
+  <releases>
+    <release version="0.1.0" date="2026-08-26">
+      <description><p>First public release.</p></description>
+    </release>
+  </releases>
+</component>

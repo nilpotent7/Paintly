@@ -31,7 +31,7 @@ Drawing logic remains on CPU for simplicity.
 
 ```sh
 # Debian / Ubuntu / Zorin / Mint
-sudo apt install build-essential libgtk-4-dev
+sudo apt install build-essential libgtk-4-dev libsoup-3.0-dev libjson-glib-dev
 
 make          # -> build/paintly
 make run
