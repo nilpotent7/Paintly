@@ -26,6 +26,9 @@ GLIB_COMPILE_RESOURCES ?= glib-compile-resources
 
 VERSION := 0.1.0
 
+# Where the donation dialog reads its wallet details (see web/).
+DONATE_URL ?= https://nilpotent.vercel.app/projects/paintly/donate
+
 
 CC     ?= gcc
 # -Wno-missing-field-initializers: GActionEntry has private padding fields
@@ -33,7 +36,8 @@ CC     ?= gcc
 CFLAGS += -O2 -g -std=c11 -Wall -Wextra -Wno-unused-parameter \
           -Wno-missing-field-initializers \
           $(PKG_CFLAGS) -Isrc -MMD -MP\
-		  -DPAINTLY_VERSION=\"$(VERSION)\"
+		  -DPAINTLY_VERSION=\"$(VERSION)\" \
+		  -DPAINTLY_DONATE_URL=\"$(DONATE_URL)\"
 LDLIBS += $(PKG_LIBS) -lm
 
 SRCS := $(wildcard src/*.c src/core/*.c src/tools/*.c src/ui/*.c)

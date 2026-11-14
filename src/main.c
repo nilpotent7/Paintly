@@ -13,6 +13,8 @@ int main(int argc, char **argv)
     g_signal_connect(app->gapp, "open",     G_CALLBACK(app_open),     app);
 
     int status = g_application_run(G_APPLICATION(app->gapp), argc, argv);
+    if (app->started_at)
+        donate_record_usage(app);   /* after the window, so startup never pays */
 
     g_object_unref(app->gapp);
     if (app->doc)

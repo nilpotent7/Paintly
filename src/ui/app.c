@@ -181,7 +181,7 @@ static gboolean run_pending_idle(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-static void run_pending(App *a)
+void app_run_pending(App *a)
 {
     if (a->pending)
         g_idle_add(run_pending_idle, a);
@@ -229,7 +229,7 @@ static void on_save_done(GObject *source, GAsyncResult *res, gpointer data)
         path = fixed;
     }
     if (do_save(a, path))
-        run_pending(a);
+        app_run_pending(a);
     else
         a->pending = NULL;
     g_free(path);
@@ -259,7 +259,7 @@ static void save_now(App *a)
 {
     if (a->doc->filepath) {
         if (do_save(a, a->doc->filepath))
-            run_pending(a);
+            app_run_pending(a);
         else
             a->pending = NULL;
     } else {
@@ -293,7 +293,7 @@ static void on_confirm_done(GObject *source, GAsyncResult *res, gpointer data)
     App *a = data;
     /* A dismissed dialog reports the cancel button, so -1 never reaches here. */
     switch (gtk_alert_dialog_choose_finish(GTK_ALERT_DIALOG(source), res, NULL)) {
-    case CONFIRM_DISCARD: run_pending(a);               break;
+    case CONFIRM_DISCARD: app_run_pending(a);           break;
     case CONFIRM_SAVE:    g_idle_add(save_now_idle, a); break;
     default:              a->pending = NULL;
     }
@@ -353,9 +353,12 @@ static void act_open(GSimpleAction *action, GVariant *param, gpointer user_data)
 static gboolean on_close_request(GtkWindow *win, gpointer user_data)
 {
     App *a = user_data;
-    if (!a->doc->modified)
+    if (a->doc->modified)
+        confirm_unsaved(a, close_window);
+    else if (donate_should_ask(a))
+        donate_ask(a, close_window);
+    else
         return FALSE;
-    confirm_unsaved(a, close_window);
     return TRUE;
 }
 
@@ -528,9 +531,19 @@ static void act_toggle_layers(GSimpleAction *action, GVariant *param,
     gtk_toggle_button_set_active(b, !gtk_toggle_button_get_active(b));
 }
 
+static void act_donate(GSimpleAction *action, GVariant *param, gpointer user_data)
+{
+    donate_dialog_show(user_data);
+}
+
 static void act_quit(GSimpleAction *action, GVariant *param, gpointer user_data)
 {
-    confirm_unsaved(user_data, quit_app);
+    App *a = user_data;
+    /* Only a clean close asks: the unsaved prompt is enough of an interruption. */
+    if (!a->doc->modified && donate_should_ask(a))
+        donate_ask(a, quit_app);
+    else
+        confirm_unsaved(a, quit_app);
 }
 
 static const GActionEntry WIN_ACTIONS[] = {
@@ -551,6 +564,7 @@ static const GActionEntry WIN_ACTIONS[] = {
     { "zoom-out",         act_zoom_out },
     { "zoom-reset",       act_zoom_reset },
     { "toggle-layers",    act_toggle_layers },
+    { "donate",           act_donate },
 };
 
 /* ---- menu bar ------------------------------------------------------------ */
@@ -686,6 +700,7 @@ void app_activate(GtkApplication *gapp, gpointer user_data)
     gtk_window_set_default_icon_name("paintly-app");
 
     /* initial state */
+    a->started_at = g_get_monotonic_time();
     a->doc = document_new(DEFAULT_W, DEFAULT_H);
     a->zoom = 1.0;
     a->brush_size = 3;

@@ -256,11 +256,7 @@ GtkWidget *ribbon_new(App *a)
     /* -- Colors (built in colors.c) -------------------------------------- */
     gtk_box_append(GTK_BOX(ribbon), colors_group_new(a));
 
-    /* -- Layers (far right, toggles the side panel) ----------------------- */
-    GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_widget_set_hexpand(spacer, TRUE);
-    gtk_box_append(GTK_BOX(ribbon), spacer);
-
+    /* -- Layers (beside the colors, toggles the side panel) --------------- */
     a->layers_btn = gtk_toggle_button_new();
     GtkWidget *img = gtk_image_new_from_icon_name("paintly-layers");
     gtk_image_set_pixel_size(GTK_IMAGE(img), 26);
@@ -271,6 +267,15 @@ GtkWidget *ribbon_new(App *a)
     g_signal_connect(a->layers_btn, "toggled", G_CALLBACK(layers_toggled), a);
     ribbon_hand_cursor(a->layers_btn);
     gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Layers", a->layers_btn));
+
+    /* -- Donate (far right) ----------------------------------------------- */
+    GtkWidget *spacer = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(spacer, TRUE);
+    gtk_box_append(GTK_BOX(ribbon), spacer);
+
+    GtkWidget *donate = action_button("win.donate", "paintly-donate",
+                                      "Support Paintly with a donation");
+    gtk_box_append(GTK_BOX(ribbon), ribbon_group_new("Donate", donate));
 
     /* Pencil starts active */
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(pencil), TRUE);

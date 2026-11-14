@@ -156,6 +156,35 @@ button.swatch:hover {
   margin-bottom: -2px;
 }
 
+/* ---- Donate dialog ------------------------------------------------------- */
+
+.donate-blurb {
+  color: #4a4a4a;
+}
+.donate-key {
+  font-size: 12px;
+  color: #616161;
+}
+/* White behind the QR whatever the theme: scanners need the quiet zone. */
+.donate-qr {
+  background-color: #ffffff;
+  border: 1px solid #e1e1e1;
+  border-radius: 8px;
+  padding: 8px;
+}
+.donate-address {
+  font-family: monospace;
+  font-size: 12px;
+  background-color: #f3f3f3;
+  border: 1px solid #e1e1e1;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+/* Wide enough for "Copied", so the address doesn't reflow on click. */
+.donate-copy {
+  min-width: 64px;
+}
+
 /* ---- Status bar ---------------------------------------------------------- */
 
 .statusbar {
